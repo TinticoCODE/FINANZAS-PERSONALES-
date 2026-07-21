@@ -1,0 +1,84 @@
+"use client";
+
+import { motion } from "framer-motion";
+import {
+  Bar,
+  BarChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { formatCompact, formatPercent } from "@/lib/format";
+import type { CreditCardData } from "@/types";
+
+type CreditDebtChartProps = {
+  cards: CreditCardData[];
+};
+
+export function CreditDebtChart({ cards }: CreditDebtChartProps) {
+  const chartData = cards.map((card) => ({
+    name: card.name,
+    used: card.usedBalance,
+    available: card.creditLimit - card.usedBalance,
+    utilization: (card.usedBalance / card.creditLimit) * 100,
+    color: card.color,
+  }));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay: 0.45 }}
+    >
+      <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">Deuda de tarjetas</CardTitle>
+          <CardDescription>Utilización del crédito</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} layout="vertical">
+                <XAxis type="number" tickFormatter={formatCompact} tick={{ fontSize: 12 }} />
+                <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} />
+                <Tooltip
+                  formatter={(value) => formatCompact(Number(value))}
+                  contentStyle={{
+                    borderRadius: "12px",
+                    border: "1px solid hsl(var(--border))",
+                    background: "hsl(var(--popover))",
+                  }}
+                />
+                <Bar
+                  dataKey="used"
+                  name="Utilizado"
+                  fill="#6366f1"
+                  radius={[0, 6, 6, 0]}
+                  animationDuration={800}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 space-y-2">
+            {chartData.map((card) => (
+              <div key={card.name} className="flex items-center justify-between text-sm">
+                <span>{card.name}</span>
+                <span className="text-muted-foreground">
+                  {formatPercent(card.utilization)} utilizado
+                </span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
