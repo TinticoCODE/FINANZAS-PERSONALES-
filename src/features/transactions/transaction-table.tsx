@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, MoreHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,9 +23,13 @@ import type { Transaction } from "@/types";
 
 type TransactionTableProps = {
   data: Transaction[];
+  onDelete?: (id: string) => void;
+  deleting?: boolean;
 };
 
-export function TransactionTable({ data }: TransactionTableProps) {
+export function TransactionTable({ data, onDelete, deleting }: TransactionTableProps) {
+  if (data.length === 0) return null;
+
   return (
     <div className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm">
       <Table>
@@ -111,11 +115,11 @@ export function TransactionTable({ data }: TransactionTableProps) {
                     }
                   />
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      Editar
-                    </DropdownMenuItem>
-                    <DropdownMenuItem variant="destructive">
+                    <DropdownMenuItem
+                      variant="destructive"
+                      disabled={deleting}
+                      onClick={() => onDelete?.(tx.id)}
+                    >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Eliminar
                     </DropdownMenuItem>

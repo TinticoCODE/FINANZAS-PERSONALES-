@@ -13,9 +13,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IncomeExpenseChart } from "@/features/dashboard/income-expense-chart";
 import { ExpenseByCategoryChart } from "@/features/dashboard/expense-chart";
-import { monthlyEvolution, expenseByCategory } from "@/services/mock-data";
+import type { ChartDataPoint, MonthlyDataPoint } from "@/types";
 
-export function ReportsPanel() {
+type ReportsPanelProps = {
+  monthlyEvolution: MonthlyDataPoint[];
+  expenseByCategory: ChartDataPoint[];
+};
+
+export function ReportsPanel({ monthlyEvolution, expenseByCategory }: ReportsPanelProps) {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="month">
@@ -42,21 +47,21 @@ export function ReportsPanel() {
           <CardHeader>
             <CardTitle className="text-base">Exportar reportes</CardTitle>
             <CardDescription>
-              Descarga tus datos en diferentes formatos
+              Descarga tus datos financieros en diferentes formatos
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" disabled>
               <FileText className="h-4 w-4" />
-              Exportar PDF
+              PDF
             </Button>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" disabled>
               <FileSpreadsheet className="h-4 w-4" />
-              Exportar Excel
+              Excel
             </Button>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" disabled>
               <Download className="h-4 w-4" />
-              Exportar CSV
+              CSV
             </Button>
           </CardContent>
         </Card>

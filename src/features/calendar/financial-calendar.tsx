@@ -11,23 +11,32 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { creditCards, budgets, reminders } from "@/services/mock-data";
+import type { BudgetData, CreditCardData, ReminderData } from "@/types";
 
-export function FinancialCalendar() {
+type FinancialCalendarProps = {
+  reminders: ReminderData[];
+  cards: CreditCardData[];
+  budgets: BudgetData[];
+};
+
+export function FinancialCalendar({ reminders, cards, budgets }: FinancialCalendarProps) {
+  const now = new Date();
+  const monthLabel = now.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+
   const events = [
     ...reminders.map((r) => ({
       date: new Date(r.dueDate),
       title: r.title,
       type: r.type,
     })),
-    ...creditCards.flatMap((card) => [
+    ...cards.flatMap((card) => [
       {
-        date: new Date(2026, 6, card.cutOffDate),
+        date: new Date(now.getFullYear(), now.getMonth(), card.cutOffDate),
         title: `Corte ${card.name}`,
         type: "CUTOFF",
       },
       {
-        date: new Date(2026, 6, card.paymentDueDate),
+        date: new Date(now.getFullYear(), now.getMonth(), card.paymentDueDate),
         title: `Pago ${card.name}`,
         type: "PAYMENT",
       },
@@ -50,12 +59,12 @@ export function FinancialCalendar() {
               <CalendarIcon className="h-4 w-4" />
               Calendario financiero
             </CardTitle>
-            <CardDescription>Julio 2026</CardDescription>
+            <CardDescription className="capitalize">{monthLabel}</CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center">
             <Calendar
               mode="single"
-              selected={new Date()}
+              selected={now}
               className="rounded-xl border"
             />
           </CardContent>
@@ -73,42 +82,47 @@ export function FinancialCalendar() {
             <CardTitle className="text-base">Próximos eventos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {upcomingEvents.map((event, index) => (
-              <div
-                key={`${event.title}-${index}`}
-                className="flex items-start justify-between rounded-xl bg-muted/40 p-3 text-sm"
-              >
-                <div>
-                  <p className="font-medium">{event.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {event.date.toLocaleDateString("es-CO", {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </p>
+            {upcomingEvents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin eventos programados</p>
+            ) : (
+              upcomingEvents.map((event, index) => (
+                <div
+                  key={`${event.title}-${index}`}
+                  className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{event.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {event.date.toLocaleDateString("es-CO", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </p>
+                  </div>
+                  <Badge variant="outline">{event.type}</Badge>
                 </div>
-                <Badge variant="outline" className="text-[10px]">
-                  {event.type}
-                </Badge>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 
         <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
           <CardHeader>
-            <CardTitle className="text-base">Presupuestos del mes</CardTitle>
+            <CardTitle className="text-base">Presupuestos activos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {budgets.slice(0, 3).map((budget) => (
-              <div key={budget.id} className="flex justify-between text-sm">
-                <span>{budget.category}</span>
-                <span className="text-muted-foreground">
-                  ${budget.spent.toLocaleString("es-CO")}
-                </span>
-              </div>
-            ))}
+            {budgets.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Sin presupuestos este mes</p>
+            ) : (
+              budgets.slice(0, 4).map((budget) => (
+                <div key={budget.id} className="flex justify-between text-sm">
+                  <span>{budget.category}</span>
+                  <span className="text-muted-foreground">
+                    ${budget.spent.toLocaleString("es-CO")} / ${budget.budget.toLocaleString("es-CO")}
+                  </span>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </motion.div>

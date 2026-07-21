@@ -1,0 +1,281 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type {
+  AccountType,
+  PaymentMethod,
+  ReminderType,
+  TransactionType,
+} from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { toNumber } from "@/lib/decimal";
+import { getDefaultUserId } from "@/lib/user";
+
+function revalidateAll() {
+  revalidatePath("/");
+  revalidatePath("/transactions");
+  revalidatePath("/accounts");
+  revalidatePath("/cards");
+  revalidatePath("/budgets");
+  revalidatePath("/goals");
+  revalidatePath("/calendar");
+  revalidatePath("/reports");
+}
+
+async function applyTransactionEffects(params: {
+  accountId: string;
+  creditCardId?: string | null;
+  type: TransactionType;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  reverse?: boolean;
+}) {
+  const multiplier = params.reverse ? -1 : 1;
+  const amount = params.amount * multiplier;
+
+  if (params.type === "INCOME") {
+    await prisma.account.update({
+      where: { id: params.accountId },
+      data: { balance: { increment: amount } },
+    });
+    return;
+  }
+
+  if (params.paymentMethod === "CREDIT" && params.creditCardId) {
+    await prisma.creditCard.update({
+      where: { id: params.creditCardId },
+      data: { usedBalance: { increment: amount } },
+    });
+    return;
+  }
+
+  await prisma.account.update({
+    where: { id: params.accountId },
+    data: { balance: { decrement: amount } },
+  });
+}
+
+export async function createAccount(data: {
+  name: string;
+  type: AccountType;
+  balance?: number;
+  color?: string;
+  icon?: string;
+}) {
+  const userId = await getDefaultUserId();
+  await prisma.account.create({
+    data: {
+      userId,
+      name: data.name,
+      type: data.type,
+      balance: data.balance ?? 0,
+      color: data.color ?? "#6366f1",
+      icon: data.icon,
+    },
+  });
+  revalidateAll();
+}
+
+export async function deleteAccount(id: string) {
+  const userId = await getDefaultUserId();
+  const count = await prisma.transaction.count({ where: { accountId: id, userId } });
+  if (count > 0) throw new Error("No puedes eliminar una cuenta con transacciones");
+  await prisma.account.delete({ where: { id, userId } });
+  revalidateAll();
+}
+
+export async function createCreditCard(data: {
+  bank: string;
+  name: string;
+  lastFourDigits: string;
+  creditLimit: number;
+  interestRate?: number;
+  cutOffDate: number;
+  paymentDueDate: number;
+  color?: string;
+}) {
+  const userId = await getDefaultUserId();
+  await prisma.creditCard.create({
+    data: {
+      userId,
+      bank: data.bank,
+      name: data.name,
+      lastFourDigits: data.lastFourDigits,
+      creditLimit: data.creditLimit,
+      usedBalance: 0,
+      interestRate: data.interestRate ?? 0,
+      cutOffDate: data.cutOffDate,
+      paymentDueDate: data.paymentDueDate,
+      color: data.color ?? "#8b5cf6",
+    },
+  });
+  revalidateAll();
+}
+
+export async function deleteCreditCard(id: string) {
+  const userId = await getDefaultUserId();
+  await prisma.creditCard.delete({ where: { id, userId } });
+  revalidateAll();
+}
+
+export async function createTransaction(data: {
+  accountId: string;
+  categoryId: string;
+  creditCardId?: string;
+  type: TransactionType;
+  amount: number;
+  description?: string;
+  paymentMethod: PaymentMethod;
+  tags?: string[];
+  date?: string;
+}) {
+  const userId = await getDefaultUserId();
+
+  await prisma.$transaction(async (tx) => {
+    await tx.transaction.create({
+      data: {
+        userId,
+        accountId: data.accountId,
+        categoryId: data.categoryId,
+        creditCardId: data.creditCardId || null,
+        type: data.type,
+        amount: data.amount,
+        description: data.description,
+        paymentMethod: data.paymentMethod,
+        tags: data.tags ?? [],
+        date: data.date ? new Date(data.date) : new Date(),
+      },
+    });
+
+    await applyTransactionEffects({
+      accountId: data.accountId,
+      creditCardId: data.creditCardId,
+      type: data.type,
+      amount: data.amount,
+      paymentMethod: data.paymentMethod,
+    });
+  });
+
+  revalidateAll();
+}
+
+export async function deleteTransaction(id: string) {
+  const userId = await getDefaultUserId();
+  const existing = await prisma.transaction.findFirst({ where: { id, userId } });
+  if (!existing) return;
+
+  await prisma.$transaction(async (tx) => {
+    await applyTransactionEffects({
+      accountId: existing.accountId,
+      creditCardId: existing.creditCardId,
+      type: existing.type,
+      amount: toNumber(existing.amount),
+      paymentMethod: existing.paymentMethod,
+      reverse: true,
+    });
+    await tx.transaction.delete({ where: { id } });
+  });
+
+  revalidateAll();
+}
+
+export async function createBudget(data: {
+  categoryId: string;
+  amount: number;
+  month: number;
+  year: number;
+}) {
+  const userId = await getDefaultUserId();
+  await prisma.budget.upsert({
+    where: {
+      userId_categoryId_month_year: {
+        userId,
+        categoryId: data.categoryId,
+        month: data.month,
+        year: data.year,
+      },
+    },
+    update: { amount: data.amount },
+    create: {
+      userId,
+      categoryId: data.categoryId,
+      amount: data.amount,
+      month: data.month,
+      year: data.year,
+    },
+  });
+  revalidateAll();
+}
+
+export async function deleteBudget(id: string) {
+  const userId = await getDefaultUserId();
+  await prisma.budget.delete({ where: { id, userId } });
+  revalidateAll();
+}
+
+export async function createSavingsGoal(data: {
+  name: string;
+  targetAmount: number;
+  savedAmount?: number;
+  targetDate?: string;
+  color?: string;
+}) {
+  const userId = await getDefaultUserId();
+  await prisma.savingsGoal.create({
+    data: {
+      userId,
+      name: data.name,
+      targetAmount: data.targetAmount,
+      savedAmount: data.savedAmount ?? 0,
+      targetDate: data.targetDate ? new Date(data.targetDate) : null,
+      color: data.color ?? "#10b981",
+    },
+  });
+  revalidateAll();
+}
+
+export async function updateSavingsGoal(
+  id: string,
+  data: { savedAmount?: number; targetAmount?: number; name?: string }
+) {
+  const userId = await getDefaultUserId();
+  await prisma.savingsGoal.update({
+    where: { id, userId },
+    data,
+  });
+  revalidateAll();
+}
+
+export async function deleteSavingsGoal(id: string) {
+  const userId = await getDefaultUserId();
+  await prisma.savingsGoal.delete({ where: { id, userId } });
+  revalidateAll();
+}
+
+export async function createReminder(data: {
+  title: string;
+  description?: string;
+  type: ReminderType;
+  dueDate: string;
+}) {
+  const userId = await getDefaultUserId();
+  await prisma.reminder.create({
+    data: {
+      userId,
+      title: data.title,
+      description: data.description,
+      type: data.type,
+      dueDate: new Date(data.dueDate),
+    },
+  });
+  revalidateAll();
+}
+
+export async function markReminderRead(id: string) {
+  const userId = await getDefaultUserId();
+  await prisma.reminder.update({
+    where: { id, userId },
+    data: { isRead: true },
+  });
+  revalidateAll();
+}

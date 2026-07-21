@@ -14,10 +14,24 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { GlobalSearch } from "@/features/search/global-search";
 import { useSidebar } from "@/hooks/use-sidebar";
-import { reminders } from "@/services/mock-data";
 import { Badge } from "@/components/ui/badge";
+import type { ReminderData, Transaction, CreditCardData, AccountData, BudgetData } from "@/types";
 
-export function AppNavbar() {
+type SearchData = {
+  transactions: Transaction[];
+  creditCards: CreditCardData[];
+  accounts: AccountData[];
+  budgets: BudgetData[];
+  incomeCategories: string[];
+  expenseCategories: string[];
+};
+
+type AppNavbarProps = {
+  reminders: ReminderData[];
+  searchData: SearchData;
+};
+
+export function AppNavbar({ reminders, searchData }: AppNavbarProps) {
   const { theme, setTheme } = useTheme();
   const { setMobileOpen } = useSidebar();
   const unreadCount = reminders.filter((r) => !r.isRead).length;
@@ -34,7 +48,7 @@ export function AppNavbar() {
       </Button>
 
       <div className="flex flex-1 items-center gap-4">
-        <GlobalSearch />
+        <GlobalSearch {...searchData} />
       </div>
 
       <div className="flex items-center gap-1">
@@ -65,14 +79,18 @@ export function AppNavbar() {
           <DropdownMenuContent align="end" className="w-80">
             <DropdownMenuLabel>Notificaciones</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {reminders.map((reminder) => (
-              <DropdownMenuItem key={reminder.id} className="flex flex-col items-start gap-1 py-3">
-                <span className="font-medium">{reminder.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {reminder.description}
-                </span>
-              </DropdownMenuItem>
-            ))}
+            {reminders.length === 0 ? (
+              <DropdownMenuItem disabled>Sin recordatorios</DropdownMenuItem>
+            ) : (
+              reminders.map((reminder) => (
+                <DropdownMenuItem key={reminder.id} className="flex flex-col items-start gap-1 py-3">
+                  <span className="font-medium">{reminder.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {reminder.description}
+                  </span>
+                </DropdownMenuItem>
+              ))
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 

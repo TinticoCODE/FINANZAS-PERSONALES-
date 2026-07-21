@@ -13,16 +13,25 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
-import {
+import type { AccountData, BudgetData, CreditCardData, Transaction } from "@/types";
+
+type GlobalSearchProps = {
+  transactions: Transaction[];
+  creditCards: CreditCardData[];
+  accounts: AccountData[];
+  budgets: BudgetData[];
+  incomeCategories: string[];
+  expenseCategories: string[];
+};
+
+export function GlobalSearch({
+  transactions,
+  creditCards,
   accounts,
   budgets,
-  creditCards,
-  expenseCategories,
   incomeCategories,
-  transactions,
-} from "@/services/mock-data";
-
-export function GlobalSearch() {
+  expenseCategories,
+}: GlobalSearchProps) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
@@ -50,48 +59,66 @@ export function GlobalSearch() {
         <CommandInput placeholder="Buscar en toda la aplicación..." />
         <CommandList>
           <CommandEmpty>Sin resultados.</CommandEmpty>
-          <CommandGroup heading="Transacciones">
-            {transactions.slice(0, 5).map((tx) => (
-              <CommandItem
-                key={tx.id}
-                onSelect={() => navigate("/transactions")}
-              >
-                {tx.description} — ${tx.amount.toLocaleString("es-CO")}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="Tarjetas">
-            {creditCards.map((card) => (
-              <CommandItem key={card.id} onSelect={() => navigate("/cards")}>
-                {card.name} •••• {card.lastFourDigits}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="Cuentas">
-            {accounts.map((account) => (
-              <CommandItem key={account.id} onSelect={() => navigate("/accounts")}>
-                {account.name}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="Presupuestos">
-            {budgets.map((budget) => (
-              <CommandItem key={budget.id} onSelect={() => navigate("/budgets")}>
-                {budget.category}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-          <CommandSeparator />
-          <CommandGroup heading="Categorías">
-            {[...incomeCategories, ...expenseCategories].map((cat) => (
-              <CommandItem key={cat} onSelect={() => navigate("/transactions")}>
-                {cat}
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          {transactions.length > 0 && (
+            <>
+              <CommandGroup heading="Transacciones">
+                {transactions.slice(0, 5).map((tx) => (
+                  <CommandItem
+                    key={tx.id}
+                    onSelect={() => navigate("/transactions")}
+                  >
+                    {tx.description || "Sin descripción"} — ${tx.amount.toLocaleString("es-CO")}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
+          {creditCards.length > 0 && (
+            <>
+              <CommandGroup heading="Tarjetas">
+                {creditCards.map((card) => (
+                  <CommandItem key={card.id} onSelect={() => navigate("/cards")}>
+                    {card.name} •••• {card.lastFourDigits}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
+          {accounts.length > 0 && (
+            <>
+              <CommandGroup heading="Cuentas">
+                {accounts.map((account) => (
+                  <CommandItem key={account.id} onSelect={() => navigate("/accounts")}>
+                    {account.name}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
+          {budgets.length > 0 && (
+            <>
+              <CommandGroup heading="Presupuestos">
+                {budgets.map((budget) => (
+                  <CommandItem key={budget.id} onSelect={() => navigate("/budgets")}>
+                    {budget.category}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
+          {[...incomeCategories, ...expenseCategories].length > 0 && (
+            <CommandGroup heading="Categorías">
+              {[...incomeCategories, ...expenseCategories].map((cat) => (
+                <CommandItem key={cat} onSelect={() => navigate("/transactions")}>
+                  {cat}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
         </CommandList>
       </CommandDialog>
     </>

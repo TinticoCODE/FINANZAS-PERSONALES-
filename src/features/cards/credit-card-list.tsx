@@ -1,8 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { AlertTriangle, Calendar, CreditCard } from "lucide-react";
+import { AlertTriangle, Calendar, CreditCard, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
   Card,
@@ -17,6 +18,8 @@ import type { CreditCardData } from "@/types";
 
 type CreditCardListProps = {
   cards: CreditCardData[];
+  onDelete?: (id: string) => void;
+  deleting?: boolean;
 };
 
 function getDaysUntil(dayOfMonth: number): number {
@@ -29,11 +32,11 @@ function getDaysUntil(dayOfMonth: number): number {
   return Math.ceil((nextMonth.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-export function CreditCardList({ cards }: CreditCardListProps) {
+export function CreditCardList({ cards, onDelete, deleting }: CreditCardListProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {cards.map((card, index) => {
-        const utilization = (card.usedBalance / card.creditLimit) * 100;
+        const utilization = card.creditLimit > 0 ? (card.usedBalance / card.creditLimit) * 100 : 0;
         const available = card.creditLimit - card.usedBalance;
         const daysToCutoff = getDaysUntil(card.cutOffDate);
         const daysToPayment = getDaysUntil(card.paymentDueDate);
@@ -63,7 +66,19 @@ export function CreditCardList({ cards }: CreditCardListProps) {
                       {card.bank} •••• {card.lastFourDigits}
                     </CardDescription>
                   </div>
-                  <CreditCard className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    {onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        disabled={deleting}
+                        onClick={() => onDelete(card.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                    <CreditCard className="h-5 w-5 text-muted-foreground" />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">

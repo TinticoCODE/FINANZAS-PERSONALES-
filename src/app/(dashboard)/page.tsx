@@ -5,48 +5,43 @@ import { CashFlowChart } from "@/features/dashboard/cash-flow-chart";
 import { MonthlyEvolutionChart } from "@/features/dashboard/monthly-evolution-chart";
 import { BudgetUsageChart } from "@/features/dashboard/budget-usage-chart";
 import { CreditDebtChart } from "@/features/dashboard/credit-debt-chart";
-import {
-  dashboardStats,
-  expenseByCategory,
-  monthlyEvolution,
-  cashFlowData,
-  budgets,
-  creditCards,
-} from "@/services/mock-data";
+import { getDashboardData } from "@/services/data.service";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const data = await getDashboardData();
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Dashboard
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Resumen financiero de julio 2026
+        <p className="mt-1 text-sm text-muted-foreground capitalize">
+          Resumen financiero de {data.monthLabel}
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {dashboardStats.map((stat, index) => (
+        {data.stats.map((stat, index) => (
           <StatCard key={stat.id} data={stat} index={index} />
         ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <ExpenseByCategoryChart data={expenseByCategory} />
-        <IncomeExpenseChart data={monthlyEvolution} />
+        <ExpenseByCategoryChart data={data.expenseByCategory} />
+        <IncomeExpenseChart data={data.monthlyEvolution} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <CashFlowChart data={cashFlowData} />
+          <CashFlowChart data={data.cashFlowData} />
         </div>
-        <MonthlyEvolutionChart data={monthlyEvolution} />
+        <MonthlyEvolutionChart data={data.monthlyEvolution} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <BudgetUsageChart data={budgets} />
-        <CreditDebtChart cards={creditCards} />
+        <BudgetUsageChart data={data.budgets} />
+        <CreditDebtChart cards={data.creditCards} />
       </div>
     </div>
   );

@@ -36,6 +36,11 @@ export function ExpenseByCategoryChart({ data }: ExpenseChartProps) {
         </CardHeader>
         <CardContent>
           <div className="h-[280px]">
+            {data.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Sin gastos registrados este mes
+              </div>
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -63,6 +68,7 @@ export function ExpenseByCategoryChart({ data }: ExpenseChartProps) {
                 />
               </PieChart>
             </ResponsiveContainer>
+            )}
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {data.map((item) => (

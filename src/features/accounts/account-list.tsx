@@ -6,6 +6,7 @@ import {
   Building2,
   Globe,
   Smartphone,
+  Trash2,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AnimatedCounter } from "@/components/shared/animated-counter";
+import { Button } from "@/components/ui/button";
 import type { AccountData } from "@/types";
 
 const iconMap: Record<string, LucideIcon> = {
@@ -28,9 +30,11 @@ const iconMap: Record<string, LucideIcon> = {
 
 type AccountListProps = {
   accounts: AccountData[];
+  onDelete?: (id: string) => void;
+  deleting?: boolean;
 };
 
-export function AccountList({ accounts }: AccountListProps) {
+export function AccountList({ accounts, onDelete, deleting }: AccountListProps) {
   const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
 
   return (
@@ -61,11 +65,23 @@ export function AccountList({ accounts }: AccountListProps) {
               <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-base font-medium">{account.name}</CardTitle>
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: `${account.color}20`, color: account.color }}
-                  >
-                    <Icon className="h-5 w-5" />
+                  <div className="flex items-center gap-2">
+                    {onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        disabled={deleting}
+                        onClick={() => onDelete(account.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                    <div
+                      className="flex h-10 w-10 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: `${account.color}20`, color: account.color }}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>

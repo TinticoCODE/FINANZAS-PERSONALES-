@@ -1,8 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
   Card,
@@ -17,13 +18,15 @@ import type { BudgetData } from "@/types";
 
 type BudgetListProps = {
   budgets: BudgetData[];
+  onDelete?: (id: string) => void;
+  deleting?: boolean;
 };
 
-export function BudgetList({ budgets }: BudgetListProps) {
+export function BudgetList({ budgets, onDelete, deleting }: BudgetListProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
       {budgets.map((budget, index) => {
-        const percent = (budget.spent / budget.budget) * 100;
+        const percent = budget.budget > 0 ? (budget.spent / budget.budget) * 100 : 0;
         const available = budget.budget - budget.spent;
         const status = getBudgetStatus(percent);
         const isAlert = percent >= 70;
@@ -40,12 +43,24 @@ export function BudgetList({ budgets }: BudgetListProps) {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">{budget.category}</CardTitle>
-                  {isAlert && (
-                    <Badge variant="outline" className="gap-1 border-amber-500 text-amber-600">
-                      <AlertTriangle className="h-3 w-3" />
-                      Alerta
-                    </Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isAlert && (
+                      <Badge variant="outline" className="gap-1 border-amber-500 text-amber-600">
+                        <AlertTriangle className="h-3 w-3" />
+                        Alerta
+                      </Badge>
+                    )}
+                    {onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        disabled={deleting}
+                        onClick={() => onDelete(budget.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">

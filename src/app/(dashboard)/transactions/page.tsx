@@ -1,29 +1,25 @@
-import { Plus, Filter } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/shared/page-header";
-import { TransactionTable } from "@/features/transactions/transaction-table";
-import { transactions } from "@/services/mock-data";
+import { TransactionsView } from "@/features/transactions/transactions-view";
+import {
+  getAccounts,
+  getCategories,
+  getCreditCards,
+  getTransactions,
+} from "@/services/data.service";
 
-export default function TransactionsPage() {
+export default async function TransactionsPage() {
+  const [transactions, accounts, categories, creditCards] = await Promise.all([
+    getTransactions(),
+    getAccounts(),
+    getCategories(),
+    getCreditCards(),
+  ]);
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Transacciones"
-        description="Administra todas tus entradas y salidas de dinero"
-        action={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Filter className="h-4 w-4" />
-              Filtrar
-            </Button>
-            <Button size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nueva transacción
-            </Button>
-          </div>
-        }
-      />
-      <TransactionTable data={transactions} />
-    </div>
+    <TransactionsView
+      transactions={transactions}
+      accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
+      categories={categories.map((c) => ({ id: c.id, name: c.name, type: c.type }))}
+      creditCards={creditCards.map((c) => ({ id: c.id, name: c.name }))}
+    />
   );
 }
