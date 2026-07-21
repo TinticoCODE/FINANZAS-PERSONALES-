@@ -26,6 +26,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/shared/page-header";
 import { TransactionTable } from "@/features/transactions/transaction-table";
 import { EmptyState } from "@/components/shared/empty-state";
+import {
+  paymentMethodLabels,
+  transactionTypeLabels,
+} from "@/lib/labels";
 import type { Transaction } from "@/types";
 
 type Option = { id: string; name: string; type?: string };
@@ -37,6 +41,14 @@ type TransactionsViewProps = {
   creditCards: Option[];
 };
 
+const initialFormState = {
+  type: "EXPENSE" as "INCOME" | "EXPENSE",
+  paymentMethod: "DEBIT" as keyof typeof paymentMethodLabels,
+  accountId: "",
+  categoryId: "",
+  creditCardId: "",
+};
+
 export function TransactionsView({
   transactions,
   accounts,
@@ -46,13 +58,16 @@ export function TransactionsView({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [type, setType] = useState<"INCOME" | "EXPENSE">("EXPENSE");
-  const [paymentMethod, setPaymentMethod] = useState("DEBIT");
-  const [accountId, setAccountId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [creditCardId, setCreditCardId] = useState("");
+  const [form, setForm] = useState(initialFormState);
 
-  const filteredCategories = categories.filter((c) => c.type === type);
+  const filteredCategories = categories.filter((c) => c.type === form.type);
+
+  const resetForm = () => setForm(initialFormState);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) resetForm();
+  };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -60,16 +75,16 @@ export function TransactionsView({
 
     startTransition(async () => {
       await createTransaction({
-        accountId,
-        categoryId,
-        creditCardId: creditCardId || undefined,
-        type,
+        accountId: form.accountId,
+        categoryId: form.categoryId,
+        creditCardId: form.creditCardId || undefined,
+        type: form.type,
         amount: Number(formData.get("amount")),
         description: (formData.get("description") as string) || undefined,
-        paymentMethod: paymentMethod as "CASH" | "DEBIT" | "CREDIT" | "TRANSFER" | "OTHER",
+        paymentMethod: form.paymentMethod,
         date: formData.get("date") as string,
       });
-      setOpen(false);
+      handleOpenChange(false);
       router.refresh();
     });
   };
@@ -81,13 +96,20 @@ export function TransactionsView({
     });
   };
 
+  const selectedCategoryName =
+    categories.find((c) => c.id === form.categoryId)?.name ?? "";
+  const selectedAccountName =
+    accounts.find((a) => a.id === form.accountId)?.name ?? "";
+  const selectedCardName =
+    creditCards.find((c) => c.id === form.creditCardId)?.name ?? "";
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Transacciones"
         description="Administra todas tus entradas y salidas de dinero"
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger render={<Button size="sm" className="gap-2" disabled={accounts.length === 0} />}>
               <Plus className="h-4 w-4" />
               Nueva transacción
@@ -100,15 +122,25 @@ export function TransactionsView({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Tipo</Label>
-                    <Select value={type} onValueChange={(v) => {
-                      if (!v) return;
-                      setType(v as "INCOME" | "EXPENSE");
-                      setCategoryId("");
-                    }}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select
+                      value={form.type}
+                      onValueChange={(v) => {
+                        if (!v) return;
+                        setForm((prev) => ({
+                          ...prev,
+                          type: v as "INCOME" | "EXPENSE",
+                          categoryId: "",
+                        }));
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar tipo">
+                          {transactionTypeLabels[form.type]}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="INCOME">Ingreso</SelectItem>
-                        <SelectItem value="EXPENSE">Gasto</SelectItem>
+                        <SelectItem value="INCOME">{transactionTypeLabels.INCOME}</SelectItem>
+                        <SelectItem value="EXPENSE">{transactionTypeLabels.EXPENSE}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -124,22 +156,44 @@ export function TransactionsView({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Categoría</Label>
-                    <Select value={categoryId} onValueChange={(v) => setCategoryId(v ?? "")}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                    <Select
+                      value={form.categoryId}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({ ...prev, categoryId: v ?? "" }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar categoría">
+                          {selectedCategoryName}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
                         {filteredCategories.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label>Cuenta</Label>
-                    <Select value={accountId} onValueChange={(v) => setAccountId(v ?? "")}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                    <Select
+                      value={form.accountId}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({ ...prev, accountId: v ?? "" }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar cuenta">
+                          {selectedAccountName}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
                         {accounts.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -148,14 +202,28 @@ export function TransactionsView({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Método de pago</Label>
-                    <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v ?? "DEBIT")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                    <Select
+                      value={form.paymentMethod}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          paymentMethod: (v ?? "DEBIT") as keyof typeof paymentMethodLabels,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar método">
+                          {paymentMethodLabels[form.paymentMethod]}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="CASH">Efectivo</SelectItem>
-                        <SelectItem value="DEBIT">Débito</SelectItem>
-                        <SelectItem value="CREDIT">Crédito</SelectItem>
-                        <SelectItem value="TRANSFER">Transferencia</SelectItem>
-                        <SelectItem value="OTHER">Otro</SelectItem>
+                        {(Object.keys(paymentMethodLabels) as Array<keyof typeof paymentMethodLabels>).map(
+                          (key) => (
+                            <SelectItem key={key} value={key}>
+                              {paymentMethodLabels[key]}
+                            </SelectItem>
+                          )
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -170,21 +238,35 @@ export function TransactionsView({
                     />
                   </div>
                 </div>
-                {paymentMethod === "CREDIT" && creditCards.length > 0 && (
+                {form.paymentMethod === "CREDIT" && creditCards.length > 0 && (
                   <div className="space-y-2">
                     <Label>Tarjeta de crédito</Label>
-                    <Select value={creditCardId} onValueChange={(v) => setCreditCardId(v ?? "")}>
-                      <SelectTrigger><SelectValue placeholder="Seleccionar tarjeta" /></SelectTrigger>
+                    <Select
+                      value={form.creditCardId}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({ ...prev, creditCardId: v ?? "" }))
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar tarjeta">
+                          {selectedCardName}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
                         {creditCards.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 )}
                 <DialogFooter>
-                  <Button type="submit" disabled={pending || !accountId || !categoryId}>
+                  <Button
+                    type="submit"
+                    disabled={pending || !form.accountId || !form.categoryId}
+                  >
                     {pending ? "Guardando..." : "Guardar"}
                   </Button>
                 </DialogFooter>

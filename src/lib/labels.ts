@@ -1,4 +1,4 @@
-import type { AccountType, PaymentMethod, TransactionType } from "@prisma/client";
+import type { AccountType, PaymentMethod } from "@prisma/client";
 
 export const accountTypeLabels: Record<AccountType, string> = {
   CASH: "Efectivo",
@@ -18,10 +18,12 @@ export const paymentMethodLabels: Record<PaymentMethod, string> = {
   OTHER: "Otro",
 };
 
-export const transactionTypeLabels: Record<TransactionType, string> = {
+export const transactionTypeLabels = {
   INCOME: "Ingreso",
   EXPENSE: "Gasto",
-};
+} as const;
+
+export const paymentMethodFormLabels = paymentMethodLabels;
 
 export const accountTypeIcons: Record<AccountType, string> = {
   CASH: "banknote",

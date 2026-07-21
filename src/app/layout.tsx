@@ -15,9 +15,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FinFlow — Finanzas Personales",
+  title: "SharkMoney — Finanzas Personales",
   description:
-    "Aplicación moderna para administrar tus finanzas personales con claridad y control.",
+    "Administra tus finanzas personales con claridad, control y velocidad.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({

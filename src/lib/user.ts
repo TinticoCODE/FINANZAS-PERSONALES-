@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { defaultCategoryColors } from "@/lib/labels";
-
-const DEFAULT_EMAIL = "default@finflow.local";
+import { getSession } from "@/lib/session";
 
 const defaultCategories = [
   { name: "Salario", type: "INCOME" as const },
@@ -35,15 +34,26 @@ async function seedDefaultCategories(userId: string) {
 }
 
 export async function getDefaultUserId() {
+  const session = await getSession();
+  const email =
+    session?.email ?? process.env.ADMIN_EMAIL ?? "admin@sharkmoney.app";
+  const name = session?.name ?? "Admin";
+
   const user = await prisma.user.upsert({
-    where: { email: DEFAULT_EMAIL },
-    update: {},
-    create: {
-      email: DEFAULT_EMAIL,
-      name: "Usuario",
-    },
+    where: { email },
+    update: { name },
+    create: { email, name },
   });
 
   await seedDefaultCategories(user.id);
   return user.id;
+}
+
+export async function getCurrentUser() {
+  const session = await getSession();
+  if (!session) return null;
+
+  return prisma.user.findUnique({
+    where: { email: session.email },
+  });
 }

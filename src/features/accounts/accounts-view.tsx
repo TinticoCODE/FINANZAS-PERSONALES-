@@ -90,7 +90,11 @@ export function AccountsView({ accounts }: AccountsViewProps) {
                   <div className="space-y-2">
                     <Label>Tipo</Label>
                     <Select value={type} onValueChange={(v) => v && setType(v as AccountType)}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Tipo de cuenta">
+                          {accountTypeLabels[type]}
+                        </SelectValue>
+                      </SelectTrigger>
                       <SelectContent>
                         {Object.entries(accountTypeLabels).map(([value, label]) => (
                           <SelectItem key={value} value={value}>{label}</SelectItem>

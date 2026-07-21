@@ -15,7 +15,7 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Configuración"
-        description="Personaliza tu experiencia en FinFlow"
+        description="Personaliza tu experiencia en SharkMoney"
       />
 
       <div className="grid gap-6 lg:grid-cols-2">

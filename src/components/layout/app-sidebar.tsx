@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
+import { ChevronLeft } from "lucide-react";
 import { mainNavItems } from "@/lib/constants";
+import { AppLogo } from "@/components/shared/app-logo";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { Button } from "@/components/ui/button";
@@ -27,21 +28,7 @@ export function AppSidebar() {
       className="hidden h-full shrink-0 flex-col border-r border-border/60 bg-sidebar/80 backdrop-blur-xl md:flex"
     >
       <div className="flex h-16 items-center justify-between border-b border-border/60 px-4">
-        <AnimatePresence mode="wait">
-          {!isCollapsed && (
-            <motion.div
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -8 }}
-              className="flex items-center gap-2"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Sparkles className="h-4 w-4" />
-              </div>
-              <span className="font-semibold tracking-tight">FinFlow</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <AppLogo showText={!isCollapsed} size="sm" />
         <Button
           variant="ghost"
           size="icon-sm"

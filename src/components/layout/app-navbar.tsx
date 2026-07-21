@@ -15,6 +15,7 @@ import {
 import { GlobalSearch } from "@/features/search/global-search";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { Badge } from "@/components/ui/badge";
+import { LogoutMenuItem } from "@/features/auth/logout-menu-item";
 import type { ReminderData, Transaction, CreditCardData, AccountData, BudgetData } from "@/types";
 
 type SearchData = {
@@ -29,9 +30,10 @@ type SearchData = {
 type AppNavbarProps = {
   reminders: ReminderData[];
   searchData: SearchData;
+  userName?: string;
 };
 
-export function AppNavbar({ reminders, searchData }: AppNavbarProps) {
+export function AppNavbar({ reminders, searchData, userName = "Admin" }: AppNavbarProps) {
   const { theme, setTheme } = useTheme();
   const { setMobileOpen } = useSidebar();
   const unreadCount = reminders.filter((r) => !r.isRead).length;
@@ -100,23 +102,20 @@ export function AppNavbar({ reminders, searchData }: AppNavbarProps) {
               <Button variant="ghost" size="icon" className="rounded-full">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                    PF
+                    {userName.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
               </Button>
             }
           />
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
+            <DropdownMenuLabel>{userName}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
               <User className="mr-2 h-4 w-4" />
               Perfil
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Search className="mr-2 h-4 w-4" />
-              Configuración
-            </DropdownMenuItem>
+            <LogoutMenuItem />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
