@@ -155,6 +155,10 @@ export type BusinessProductData = {
   unitCost: number;
   inventoryValue: number;
   isInventoryTracked: boolean;
+  supplierName?: string;
+  supplierPhone?: string;
+  supplierWhatsApp?: string;
+  supplierEmail?: string;
 };
 
 export type BusinessCustomerData = {

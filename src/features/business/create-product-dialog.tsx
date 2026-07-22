@@ -2,12 +2,23 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Package, PackagePlus, Plus } from "lucide-react";
+import {
+  Mail,
+  MessageCircle,
+  Package,
+  PackageMinus,
+  PackagePlus,
+  Pencil,
+  Phone,
+  Plus,
+} from "lucide-react";
 import {
   createBusinessProduct,
+  removeStockProduct,
   restockProduct,
+  updateBusinessProductSupplier,
 } from "@/actions/business.actions";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -18,13 +29,72 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { mailtoUrl, telUrl, whatsappUrl } from "@/lib/contact-links";
 import { formatCurrency } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { BusinessProductData } from "@/types";
 
 type CreateProductDialogProps = {
   businessId: string;
   trackInventory: boolean;
 };
+
+function SupplierFields({
+  prefix = "",
+  defaults,
+}: {
+  prefix?: string;
+  defaults?: {
+    supplierName?: string;
+    supplierPhone?: string;
+    supplierWhatsApp?: string;
+    supplierEmail?: string;
+  };
+}) {
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor={`${prefix}supplierName`}>Proveedor</Label>
+        <Input
+          id={`${prefix}supplierName`}
+          name="supplierName"
+          placeholder="Nombre del proveedor"
+          defaultValue={defaults?.supplierName ?? ""}
+        />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}supplierWhatsApp`}>WhatsApp</Label>
+          <Input
+            id={`${prefix}supplierWhatsApp`}
+            name="supplierWhatsApp"
+            placeholder="300 123 4567"
+            defaultValue={defaults?.supplierWhatsApp ?? ""}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}supplierPhone`}>Teléfono</Label>
+          <Input
+            id={`${prefix}supplierPhone`}
+            name="supplierPhone"
+            placeholder="601 234 5678"
+            defaultValue={defaults?.supplierPhone ?? ""}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${prefix}supplierEmail`}>Correo</Label>
+        <Input
+          id={`${prefix}supplierEmail`}
+          name="supplierEmail"
+          type="email"
+          placeholder="proveedor@email.com"
+          defaultValue={defaults?.supplierEmail ?? ""}
+        />
+      </div>
+    </>
+  );
+}
 
 export function CreateProductDialog({
   businessId,
@@ -44,6 +114,10 @@ export function CreateProductDialog({
         initialStock: trackInventory ? Number(formData.get("initialStock") || 0) : 0,
         unitCost: trackInventory ? Number(formData.get("unitCost") || 0) : 0,
         isInventoryTracked: trackInventory,
+        supplierName: (formData.get("supplierName") as string) || undefined,
+        supplierPhone: (formData.get("supplierPhone") as string) || undefined,
+        supplierWhatsApp: (formData.get("supplierWhatsApp") as string) || undefined,
+        supplierEmail: (formData.get("supplierEmail") as string) || undefined,
       });
       setOpen(false);
       router.refresh();
@@ -60,7 +134,7 @@ export function CreateProductDialog({
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <form action={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Nuevo producto</DialogTitle>
@@ -90,6 +164,12 @@ export function CreateProductDialog({
                 </div>
               </>
             )}
+            <div className="border-t pt-4">
+              <p className="mb-3 text-sm font-medium">Contacto del proveedor</p>
+              <div className="space-y-3">
+                <SupplierFields />
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={pending}>
@@ -102,27 +182,150 @@ export function CreateProductDialog({
   );
 }
 
-type RestockDialogProps = {
+function SupplierContact({
+  product,
+  onEdit,
+}: {
+  product: BusinessProductData;
+  onEdit: () => void;
+}) {
+  const wa = product.supplierWhatsApp ? whatsappUrl(product.supplierWhatsApp) : "";
+  const tel = product.supplierPhone ? telUrl(product.supplierPhone) : "";
+  const mail = product.supplierEmail ? mailtoUrl(product.supplierEmail) : "";
+  const hasContact = product.supplierName || wa || tel || mail;
+
+  if (!hasContact) {
+    return (
+      <button
+        type="button"
+        onClick={onEdit}
+        className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+      >
+        Agregar proveedor
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      {product.supplierName && (
+        <span className="text-xs text-muted-foreground">{product.supplierName}</span>
+      )}
+      {wa && (
+        <a
+          href={wa}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-7 gap-1 px-2 text-xs")}
+        >
+          <MessageCircle className="h-3 w-3 text-green-600" />
+          WhatsApp
+        </a>
+      )}
+      {tel && (
+        <a
+          href={tel}
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 gap-1 px-2 text-xs")}
+        >
+          <Phone className="h-3 w-3" />
+          {product.supplierPhone}
+        </a>
+      )}
+      {mail && (
+        <a
+          href={mail}
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 gap-1 px-2 text-xs")}
+        >
+          <Mail className="h-3 w-3" />
+          {product.supplierEmail}
+        </a>
+      )}
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-7 w-7"
+        title="Editar proveedor"
+        onClick={onEdit}
+      >
+        <Pencil className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+}
+
+type EditSupplierDialogProps = {
+  product: BusinessProductData;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+function EditSupplierDialog({ product, open, onOpenChange }: EditSupplierDialogProps) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function handleSubmit(formData: FormData) {
+    startTransition(async () => {
+      await updateBusinessProductSupplier({
+        productId: product.id,
+        supplierName: (formData.get("supplierName") as string) || undefined,
+        supplierPhone: (formData.get("supplierPhone") as string) || undefined,
+        supplierWhatsApp: (formData.get("supplierWhatsApp") as string) || undefined,
+        supplierEmail: (formData.get("supplierEmail") as string) || undefined,
+      });
+      onOpenChange(false);
+      router.refresh();
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <form action={handleSubmit}>
+          <DialogHeader>
+            <DialogTitle>Proveedor — {product.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-4">
+            <SupplierFields
+              prefix="edit-"
+              defaults={{
+                supplierName: product.supplierName,
+                supplierPhone: product.supplierPhone,
+                supplierWhatsApp: product.supplierWhatsApp,
+                supplierEmail: product.supplierEmail,
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Guardando..." : "Guardar contacto"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type StockDialogProps = {
   businessId: string;
   product: BusinessProductData;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
-function RestockDialog({
-  businessId,
-  product,
-  open,
-  onOpenChange,
-}: RestockDialogProps) {
+type StockMode = "add" | "remove";
+
+function StockDialog({ businessId, product, open, onOpenChange }: StockDialogProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [mode, setMode] = useState<StockMode>("add");
   const [quantity, setQuantity] = useState("1");
   const [unitCost, setUnitCost] = useState(String(product.unitCost || 0));
   const [error, setError] = useState<string | null>(null);
 
   function handleOpenChange(next: boolean) {
     if (next) {
+      setMode("add");
       setQuantity("1");
       setUnitCost(String(product.unitCost || 0));
       setError(null);
@@ -130,7 +333,7 @@ function RestockDialog({
     onOpenChange(next);
   }
 
-  function submit(addQty: number) {
+  function submitAdd(addQty: number) {
     if (addQty <= 0) {
       setError("La cantidad debe ser mayor a cero");
       return;
@@ -152,7 +355,39 @@ function RestockDialog({
     });
   }
 
+  function submitRemove(removeQty: number) {
+    if (removeQty <= 0) {
+      setError("La cantidad debe ser mayor a cero");
+      return;
+    }
+    if (removeQty > product.stock) {
+      setError(`Stock insuficiente. Disponible: ${product.stock} und`);
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      try {
+        await removeStockProduct({
+          businessId,
+          productId: product.id,
+          quantity: removeQty,
+        });
+        handleOpenChange(false);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error al quitar stock");
+      }
+    });
+  }
+
+  function submit() {
+    const qty = Number(quantity);
+    if (mode === "add") submitAdd(qty);
+    else submitRemove(qty);
+  }
+
   const quickAdds = [1, 5, 10];
+  const qtyNum = Number(quantity) || 0;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -161,6 +396,35 @@ function RestockDialog({
           <DialogTitle>Actualizar stock</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={mode === "add" ? "default" : "outline"}
+              className="gap-1"
+              onClick={() => {
+                setMode("add");
+                setError(null);
+              }}
+            >
+              <PackagePlus className="h-4 w-4" />
+              Agregar stock
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={mode === "remove" ? "destructive" : "outline"}
+              className="gap-1"
+              onClick={() => {
+                setMode("remove");
+                setError(null);
+              }}
+            >
+              <PackageMinus className="h-4 w-4" />
+              Quitar stock
+            </Button>
+          </div>
+
           <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
             <p className="font-medium">{product.name}</p>
             <p className="text-muted-foreground">
@@ -176,48 +440,71 @@ function RestockDialog({
                 type="button"
                 size="sm"
                 variant="secondary"
-                disabled={pending}
-                onClick={() => submit(n)}
+                disabled={pending || (mode === "remove" && n > product.stock)}
+                onClick={() => (mode === "add" ? submitAdd(n) : submitRemove(n))}
               >
-                +{n}
+                {mode === "add" ? `+${n}` : `−${n}`}
               </Button>
             ))}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="restock-qty">Unidades a agregar</Label>
+            <Label htmlFor="stock-qty">
+              Unidades a {mode === "add" ? "agregar" : "quitar"}
+            </Label>
             <Input
-              id="restock-qty"
+              id="stock-qty"
               type="number"
               min={1}
+              max={mode === "remove" ? product.stock : undefined}
               value={quantity}
               onChange={(e) => setQuantity(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="restock-cost">Costo unitario (COGS)</Label>
-            <Input
-              id="restock-cost"
-              type="number"
-              min={0}
-              value={unitCost}
-              onChange={(e) => setUnitCost(e.target.value)}
-            />
-          </div>
-          {quantity && Number(quantity) > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Nuevo stock: {product.stock + Number(quantity)} und · Entrada inventario:{" "}
-              {formatCurrency(Number(quantity) * (Number(unitCost) || 0))}
+
+          {mode === "add" && (
+            <div className="space-y-2">
+              <Label htmlFor="stock-cost">Costo unitario (COGS)</Label>
+              <Input
+                id="stock-cost"
+                type="number"
+                min={0}
+                value={unitCost}
+                onChange={(e) => setUnitCost(e.target.value)}
+              />
+            </div>
+          )}
+
+          {qtyNum > 0 && (
+            <p className={cn("text-xs text-muted-foreground", mode === "remove" && "text-destructive/80")}>
+              {mode === "add" ? (
+                <>
+                  Nuevo stock: {product.stock + qtyNum} und · Entrada inventario:{" "}
+                  {formatCurrency(qtyNum * (Number(unitCost) || 0))}
+                </>
+              ) : (
+                <>Nuevo stock: {Math.max(0, product.stock - qtyNum)} und</>
+              )}
             </p>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <Button
-            disabled={pending || !quantity || Number(quantity) <= 0}
-            onClick={() => submit(Number(quantity))}
+            variant={mode === "remove" ? "destructive" : "default"}
+            disabled={
+              pending ||
+              !quantity ||
+              qtyNum <= 0 ||
+              (mode === "remove" && qtyNum > product.stock)
+            }
+            onClick={submit}
           >
-            {pending ? "Guardando..." : "Agregar al stock"}
+            {pending
+              ? "Guardando..."
+              : mode === "add"
+                ? "Agregar al stock"
+                : "Quitar del stock"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -231,8 +518,10 @@ type ProductListProps = {
 };
 
 export function ProductList({ businessId, products }: ProductListProps) {
-  const [restockProductId, setRestockProductId] = useState<string | null>(null);
-  const selectedProduct = products.find((p) => p.id === restockProductId);
+  const [stockProductId, setStockProductId] = useState<string | null>(null);
+  const [editSupplierProductId, setEditSupplierProductId] = useState<string | null>(null);
+  const selectedProduct = products.find((p) => p.id === stockProductId);
+  const editSupplierProduct = products.find((p) => p.id === editSupplierProductId);
 
   if (products.length === 0) {
     return (
@@ -247,12 +536,16 @@ export function ProductList({ businessId, products }: ProductListProps) {
     <>
       <ul className="divide-y divide-border">
         {products.map((p) => (
-          <li key={p.id} className="flex items-center justify-between gap-3 py-3 text-sm">
+          <li key={p.id} className="flex items-start justify-between gap-3 py-3 text-sm">
             <div className="min-w-0 flex-1">
               <p className="font-medium">{p.name}</p>
               <p className="text-muted-foreground">
                 Stock: <strong>{p.stock}</strong> und
               </p>
+              <SupplierContact
+                product={p}
+                onEdit={() => setEditSupplierProductId(p.id)}
+              />
             </div>
             <div className="flex items-center gap-2">
               <div className="text-right">
@@ -265,7 +558,7 @@ export function ProductList({ businessId, products }: ProductListProps) {
                 size="sm"
                 variant="outline"
                 className="shrink-0"
-                onClick={() => setRestockProductId(p.id)}
+                onClick={() => setStockProductId(p.id)}
               >
                 <PackagePlus className="mr-1 h-4 w-4" />
                 Stock
@@ -276,11 +569,19 @@ export function ProductList({ businessId, products }: ProductListProps) {
       </ul>
 
       {selectedProduct && (
-        <RestockDialog
+        <StockDialog
           businessId={businessId}
           product={selectedProduct}
-          open={restockProductId !== null}
-          onOpenChange={(open) => !open && setRestockProductId(null)}
+          open={stockProductId !== null}
+          onOpenChange={(open) => !open && setStockProductId(null)}
+        />
+      )}
+
+      {editSupplierProduct && (
+        <EditSupplierDialog
+          product={editSupplierProduct}
+          open={editSupplierProductId !== null}
+          onOpenChange={(open) => !open && setEditSupplierProductId(null)}
         />
       )}
     </>

@@ -203,6 +203,10 @@ export function mapBusinessProduct(product: ProductWithInventory): BusinessProdu
     unitCost,
     inventoryValue: stock * unitCost,
     isInventoryTracked: product.isInventoryTracked,
+    supplierName: product.supplierName ?? undefined,
+    supplierPhone: product.supplierPhone ?? undefined,
+    supplierWhatsApp: product.supplierWhatsApp ?? undefined,
+    supplierEmail: product.supplierEmail ?? undefined,
   };
 }
 

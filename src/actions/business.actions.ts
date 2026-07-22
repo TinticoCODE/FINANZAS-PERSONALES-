@@ -165,6 +165,10 @@ export async function createBusinessProduct(data: {
   isInventoryTracked?: boolean;
   initialStock?: number;
   unitCost?: number;
+  supplierName?: string;
+  supplierPhone?: string;
+  supplierWhatsApp?: string;
+  supplierEmail?: string;
 }) {
   const userId = await getDefaultUserId();
   const business = await prisma.business.findFirstOrThrow({
@@ -180,6 +184,10 @@ export async function createBusinessProduct(data: {
         salePrice: data.salePrice,
         unit: data.unit ?? "und",
         isInventoryTracked: data.isInventoryTracked ?? business.businessType !== "SERVICE",
+        supplierName: data.supplierName,
+        supplierPhone: data.supplierPhone,
+        supplierWhatsApp: data.supplierWhatsApp,
+        supplierEmail: data.supplierEmail,
       },
     });
 
@@ -274,6 +282,106 @@ export async function restockProduct(data: {
         type: "PURCHASE",
         quantity: data.quantity,
         unitCost: data.unitCost,
+        movementDate: data.date ?? new Date(),
+      },
+    });
+  });
+
+  revalidateBusiness(business.slug);
+}
+
+export async function updateBusinessProductSupplier(data: {
+  productId: string;
+  supplierName?: string;
+  supplierPhone?: string;
+  supplierWhatsApp?: string;
+  supplierEmail?: string;
+}) {
+  const userId = await getDefaultUserId();
+  const product = await prisma.businessProduct.findFirstOrThrow({
+    where: { id: data.productId },
+    include: { business: true },
+  });
+
+  if (product.business.userId !== userId) {
+    throw new Error("No autorizado");
+  }
+
+  await prisma.businessProduct.update({
+    where: { id: data.productId },
+    data: {
+      supplierName: data.supplierName || null,
+      supplierPhone: data.supplierPhone || null,
+      supplierWhatsApp: data.supplierWhatsApp || null,
+      supplierEmail: data.supplierEmail || null,
+    },
+  });
+
+  revalidateBusiness(product.business.slug);
+}
+
+export async function removeStockProduct(data: {
+  businessId: string;
+  productId: string;
+  quantity: number;
+  date?: Date;
+}) {
+  const userId = await getDefaultUserId();
+  const business = await prisma.business.findFirstOrThrow({
+    where: { id: data.businessId, userId },
+  });
+
+  if (data.quantity <= 0) {
+    throw new Error("La cantidad debe ser mayor a cero");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const item = await tx.inventoryItem.findUnique({
+      where: {
+        businessId_productId: {
+          businessId: data.businessId,
+          productId: data.productId,
+        },
+      },
+      include: { product: true },
+    });
+
+    if (!item) {
+      throw new Error("No hay inventario registrado para este producto");
+    }
+
+    const currentQty = Number(item.quantity);
+    if (data.quantity > currentQty) {
+      throw new Error(`Stock insuficiente. Disponible: ${currentQty} und`);
+    }
+
+    const unitCost = Number(item.unitCost);
+    const totalValue = data.quantity * unitCost;
+
+    await tx.inventoryItem.update({
+      where: { id: item.id },
+      data: { quantity: { decrement: data.quantity } },
+    });
+
+    if (totalValue > 0) {
+      await postJournalEntry(tx, {
+        businessId: data.businessId,
+        entryDate: data.date ?? new Date(),
+        description: `Ajuste inventario — ${item.product.name}`,
+        lines: [
+          { code: "5100", debit: totalValue },
+          { code: "1300", credit: totalValue },
+        ],
+      });
+    }
+
+    await tx.inventoryMovement.create({
+      data: {
+        inventoryItemId: item.id,
+        type: "ADJUSTMENT",
+        quantity: data.quantity,
+        unitCost,
+        notes: "Reducción manual de stock",
         movementDate: data.date ?? new Date(),
       },
     });
