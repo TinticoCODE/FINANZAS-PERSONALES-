@@ -6,17 +6,17 @@ import { BusinessKpiGrid } from "@/features/business/business-kpi-grid";
 import { CapitalTransferDialog } from "@/features/business/capital-transfer-dialog";
 import { CreateProductDialog, ProductList } from "@/features/business/create-product-dialog";
 import { CreateSaleDialog } from "@/features/business/create-sale-dialog";
+import { SalesList } from "@/features/business/sales-list";
 import {
   CustomerRiskBadge,
   OverdueInstallmentsTable,
 } from "@/features/business/overdue-installments-table";
 import { PageHeader } from "@/components/shared/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatCurrency, formatDate, formatPercent } from "@/lib/format";
-import { businessTypeLabels, salePaymentTermsLabels } from "@/lib/labels";
+import { formatCurrency, formatPercent } from "@/lib/format";
+import { businessTypeLabels } from "@/lib/labels";
 import type { BusinessDashboardData } from "@/types";
 
 type BusinessDashboardProps = {
@@ -158,30 +158,7 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
               <CardTitle className="text-base">Ventas recientes</CardTitle>
             </CardHeader>
             <CardContent>
-              {data.recentSales.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  Sin ventas registradas
-                </p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {data.recentSales.map((sale) => (
-                    <li key={sale.id} className="flex items-center justify-between py-3 text-sm">
-                      <div>
-                        <p className="font-medium">
-                          {sale.saleNumber} · {sale.customerName ?? "Sin cliente"}
-                        </p>
-                        <p className="text-muted-foreground">{formatDate(sale.saleDate)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium">{formatCurrency(sale.totalAmount)}</p>
-                        <Badge variant="outline" className="text-xs">
-                          {salePaymentTermsLabels[sale.paymentTerms as keyof typeof salePaymentTermsLabels]}
-                        </Badge>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <SalesList sales={data.recentSales} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -202,8 +179,12 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
                     <li key={c.id} className="flex items-center justify-between py-3 text-sm">
                       <div>
                         <p className="font-medium">{c.name}</p>
-                        {c.phone && (
-                          <p className="text-muted-foreground">{c.phone}</p>
+                        {c.phone ? (
+                          <p className="inline-flex items-center gap-1 text-muted-foreground">
+                            <span className="text-xs">Contacto:</span> {c.phone}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Sin teléfono</p>
                         )}
                       </div>
                       <div className="flex items-center gap-2">

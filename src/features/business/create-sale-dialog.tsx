@@ -53,6 +53,7 @@ export function CreateSaleDialog({
   const [cashDown, setCashDown] = useState("0");
   const [installmentCount, setInstallmentCount] = useState("3");
   const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   const product = products.find((p) => p.id === productId);
   const selectedCustomer = customers.find((c) => c.id === customerId);
@@ -83,12 +84,14 @@ export function CreateSaleDialog({
     const id = await createBusinessCustomer({
       businessId,
       name: newCustomerName.trim(),
+      phone: newCustomerPhone.trim() || undefined,
     });
     setCustomers((prev) => [
       ...prev,
       {
         id,
         name: newCustomerName.trim(),
+        phone: newCustomerPhone.trim() || undefined,
         riskLevel: "LOW",
         totalOutstanding: 0,
         overdueDaysMax: 0,
@@ -230,6 +233,16 @@ export function CreateSaleDialog({
               value={newCustomerName}
               onChange={(e) => setNewCustomerName(e.target.value)}
               placeholder="Nombre del cliente"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="sale-customer-phone">Teléfono de contacto</Label>
+            <Input
+              id="sale-customer-phone"
+              type="tel"
+              value={newCustomerPhone}
+              onChange={(e) => setNewCustomerPhone(e.target.value)}
+              placeholder="300 123 4567"
             />
           </div>
           {credit > 0 && (

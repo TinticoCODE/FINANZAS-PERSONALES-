@@ -240,6 +240,7 @@ export function mapBusinessSale(sale: SaleWithRelations): BusinessSaleData {
     saleNumber: sale.saleNumber,
     saleDate: sale.saleDate.toISOString(),
     customerName: sale.customer?.name,
+    customerPhone: sale.customer?.phone ?? undefined,
     totalAmount: toNumber(sale.totalAmount),
     cashReceived: toNumber(sale.cashReceived),
     paymentTerms: sale.paymentTerms,

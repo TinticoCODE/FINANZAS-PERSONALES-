@@ -182,6 +182,7 @@ export type BusinessSaleData = {
   saleNumber: string;
   saleDate: string;
   customerName?: string;
+  customerPhone?: string;
   totalAmount: number;
   cashReceived: number;
   paymentTerms: string;

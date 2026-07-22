@@ -228,3 +228,75 @@ export async function registerInstallmentPayment(params: {
     return entry;
   });
 }
+
+function reverseJournalLines(
+  lines: { debit: unknown; credit: unknown; ledgerAccount: { code: string } }[]
+) {
+  return lines.map((line) => ({
+    code: line.ledgerAccount.code,
+    debit: Number(line.credit),
+    credit: Number(line.debit),
+  }));
+}
+
+export async function deleteBusinessSale(saleId: string) {
+  return prisma.$transaction(async (tx) => {
+    const sale = await tx.businessSale.findUniqueOrThrow({
+      where: { id: saleId },
+      include: {
+        lines: true,
+        installments: { include: { payments: true } },
+        journalEntry: {
+          include: { lines: { include: { ledgerAccount: true } } },
+        },
+        business: true,
+      },
+    });
+
+    const hasPayments = sale.installments.some(
+      (i) => Number(i.paidAmount) > 0 || i.payments.length > 0
+    );
+    if (hasPayments) {
+      throw new Error(
+        "No se puede eliminar una venta con cuotas cobradas. Registra la anulación manualmente."
+      );
+    }
+
+    await postJournalEntry(tx, {
+      businessId: sale.businessId,
+      entryDate: new Date(),
+      description: `Anulación ${sale.saleNumber}`,
+      reference: `VOID-${sale.saleNumber}`,
+      lines: reverseJournalLines(sale.journalEntry.lines),
+    });
+
+    const trackInventory = sale.business.businessType !== "SERVICE";
+    if (trackInventory) {
+      for (const line of sale.lines) {
+        if (!line.productId) continue;
+        await tx.inventoryItem.updateMany({
+          where: {
+            businessId: sale.businessId,
+            productId: line.productId,
+          },
+          data: { quantity: { increment: Number(line.quantity) } },
+        });
+      }
+      await tx.inventoryMovement.deleteMany({
+        where: { referenceType: "SALE", referenceId: sale.id },
+      });
+    }
+
+    if (sale.customerId) {
+      await tx.businessCustomer.update({
+        where: { id: sale.customerId },
+        data: { totalSales: { decrement: Number(sale.totalAmount) } },
+      });
+    }
+
+    const journalEntryId = sale.journalEntryId;
+    await tx.businessSale.delete({ where: { id: saleId } });
+    await tx.businessJournalLine.deleteMany({ where: { journalEntryId } });
+    await tx.businessJournalEntry.delete({ where: { id: journalEntryId } });
+  });
+}

@@ -11,6 +11,7 @@ import {
 import { postJournalEntry, getLedgerBalance } from "@/domain/business/journal.service";
 import {
   createBusinessSale,
+  deleteBusinessSale,
   registerInstallmentPayment,
   type InstallmentPlanItem,
   type SaleLineInput,
@@ -277,6 +278,21 @@ export async function createSaleAction(data: {
   });
 
   revalidateBusiness(business.slug);
+}
+
+export async function deleteSaleAction(saleId: string) {
+  const userId = await getDefaultUserId();
+  const sale = await prisma.businessSale.findUniqueOrThrow({
+    where: { id: saleId },
+    include: { business: true },
+  });
+
+  if (sale.business.userId !== userId) {
+    throw new Error("No autorizado");
+  }
+
+  await deleteBusinessSale(saleId);
+  revalidateBusiness(sale.business.slug);
 }
 
 export async function payInstallmentAction(data: {
