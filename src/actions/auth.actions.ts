@@ -7,17 +7,20 @@ export async function loginFormAction(
   _prevState: { error?: string } | null,
   formData: FormData
 ): Promise<{ error?: string } | null> {
-  const email = String(formData.get("email") ?? "").trim();
+  const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
-  const adminEmail = process.env.ADMIN_EMAIL ?? "admin@sharkmoney.app";
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "admin123";
+  const adminUsername = process.env.ADMIN_USERNAME ?? "admin";
+  const adminPassword = process.env.ADMIN_PASSWORD ?? "Pedro999@";
 
-  if (email !== adminEmail || password !== adminPassword) {
-    return { error: "Correo o contraseña incorrectos" };
+  if (username !== adminUsername || password !== adminPassword) {
+    return { error: "Usuario o contraseña incorrectos" };
   }
 
-  await createSession({ email, name: "Admin" });
+  await createSession({
+    email: "admin@sharkmoney.app",
+    name: "Admin",
+  });
   redirect("/");
 }
 

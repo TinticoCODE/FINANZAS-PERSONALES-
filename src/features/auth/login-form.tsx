@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { loginFormAction } from "@/actions/auth.actions";
 import { AppLogo } from "@/components/shared/app-logo";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import {
 
 export function LoginForm() {
   const [state, formAction, pending] = useActionState(loginFormAction, null);
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
     <Card className="w-full max-w-md border-border/60 bg-card/90 backdrop-blur-sm">
@@ -33,25 +35,42 @@ export function LoginForm() {
       <CardContent>
         <form action={formAction} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Correo</Label>
+            <Label htmlFor="username">Usuario</Label>
             <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="admin@sharkmoney.app"
+              id="username"
+              name="username"
+              type="text"
+              placeholder="admin"
               required
               autoComplete="username"
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              required
-              autoComplete="current-password"
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                className="pr-10"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="absolute top-1/2 right-2 -translate-y-1/2 text-muted-foreground"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
           {state?.error && (
             <p className="text-sm text-destructive">{state.error}</p>
