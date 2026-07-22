@@ -24,11 +24,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-const transferTypeLabels = {
-  OWNER_INVESTMENT: "Inversión (personal → negocio)",
-  OWNER_WITHDRAWAL: "Retiro de utilidades (negocio → personal)",
-} as const;
-
 type CapitalTransferDialogProps = {
   businessId: string;
   accounts: { id: string; name: string }[];
@@ -41,12 +36,9 @@ export function CapitalTransferDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [type, setType] = useState<string>("OWNER_INVESTMENT");
+  const [type, setType] = useState("OWNER_INVESTMENT");
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
-
-  const selectedAccountName =
-    accounts.find((a) => a.id === accountId)?.name ?? "Selecciona cuenta";
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -74,7 +66,9 @@ export function CapitalTransferDialog({
         setOpen(false);
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Error al registrar transferencia");
+        setError(
+          err instanceof Error ? err.message : "Error al registrar transferencia"
+        );
       }
     });
   };
@@ -89,46 +83,50 @@ export function CapitalTransferDialog({
           </Button>
         }
       />
-      <DialogContent>
+      <DialogContent className="z-[100]">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Transferencia de capital</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="relative z-[100] space-y-4 py-4">
             {accounts.length === 0 && (
               <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
                 Crea una cuenta personal en Cuentas antes de transferir capital.
               </p>
             )}
             <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={type} onValueChange={(v) => v && setType(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Tipo de transferencia">
-                    {transferTypeLabels[type as keyof typeof transferTypeLabels]}
-                  </SelectValue>
+              <Label htmlFor="transfer-type">Tipo</Label>
+              <Select
+                name="transfer-type"
+                value={type}
+                onValueChange={(v) => v && setType(v)}
+              >
+                <SelectTrigger id="transfer-type" className="w-full">
+                  <SelectValue placeholder="Selecciona el tipo" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="OWNER_INVESTMENT">
-                    {transferTypeLabels.OWNER_INVESTMENT}
+                <SelectContent className="z-[200]">
+                  <SelectItem value="OWNER_INVESTMENT" label="Inversión (personal → negocio)">
+                    Inversión (personal → negocio)
                   </SelectItem>
-                  <SelectItem value="OWNER_WITHDRAWAL">
-                    {transferTypeLabels.OWNER_WITHDRAWAL}
+                  <SelectItem value="OWNER_WITHDRAWAL" label="Retiro de utilidades (negocio → personal)">
+                    Retiro de utilidades (negocio → personal)
                   </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Cuenta personal</Label>
-              <Select value={accountId} onValueChange={(v) => v && setAccountId(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecciona cuenta">
-                    {selectedAccountName}
-                  </SelectValue>
+              <Label htmlFor="personal-account">Cuenta personal</Label>
+              <Select
+                name="personal-account"
+                value={accountId}
+                onValueChange={(v) => v && setAccountId(v)}
+              >
+                <SelectTrigger id="personal-account" className="w-full">
+                  <SelectValue placeholder="Selecciona la cuenta" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[200]">
                   {accounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
+                    <SelectItem key={a.id} value={a.id} label={a.name}>
                       {a.name}
                     </SelectItem>
                   ))}
@@ -152,9 +150,7 @@ export function CapitalTransferDialog({
               <Label htmlFor="notes">Notas</Label>
               <Textarea id="notes" name="notes" rows={2} />
             </div>
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={pending || !accountId}>
