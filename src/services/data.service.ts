@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
 import {
   mapAccount,
+  mapAccountReceivable,
   mapBudget,
   mapCreditCard,
   mapReminder,
@@ -16,6 +17,7 @@ import {
 import type {
   ChartDataPoint,
   CreditCardData,
+  LoansSummaryData,
   MonthlyDataPoint,
   StatCardData,
 } from "@/types";
@@ -163,6 +165,43 @@ export async function getSavingsGoals() {
     orderBy: { createdAt: "asc" },
   });
   return goals.map(mapSavingsGoal);
+}
+
+export async function getLoansData() {
+  const userId = await getDefaultUserId();
+
+  const [receivables, accounts] = await Promise.all([
+    prisma.accountReceivable.findMany({
+      where: { userId },
+      include: {
+        sourceAccount: true,
+        payments: {
+          include: { destinationAccount: true },
+          orderBy: { paymentDate: "desc" },
+        },
+      },
+      orderBy: { loanDate: "desc" },
+    }),
+    prisma.account.findMany({
+      where: { userId, isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
+
+  const loans = receivables.map(mapAccountReceivable);
+
+  const summary: LoansSummaryData = {
+    totalOutstanding: loans
+      .filter((l) => l.status === "ACTIVE")
+      .reduce((sum, l) => sum + l.outstandingBalance, 0),
+    totalPrincipalLent: loans.reduce((sum, l) => sum + l.principalAmount, 0),
+    totalCollected: loans.reduce((sum, l) => sum + l.collectedAmount, 0),
+    activeLoans: loans.filter((l) => l.status === "ACTIVE").length,
+    paidLoans: loans.filter((l) => l.status === "PAID").length,
+  };
+
+  return { loans, summary, accounts };
 }
 
 export async function getReminders() {

@@ -1,8 +1,10 @@
 import type {
   Account,
+  AccountReceivable,
   Budget,
   Category,
   CreditCard,
+  ReceivablePayment,
   Reminder,
   SavingsGoal,
   Transaction,
@@ -20,6 +22,8 @@ import type {
   ReminderData,
   SavingsGoalData,
   Transaction as TransactionUI,
+  AccountReceivableData,
+  ReceivablePaymentData,
 } from "@/types";
 
 type TransactionWithRelations = Transaction & {
@@ -110,5 +114,48 @@ export function mapReminder(reminder: Reminder): ReminderData {
     type: reminder.type,
     dueDate: reminder.dueDate.toISOString(),
     isRead: reminder.isRead,
+  };
+}
+
+type ReceivableWithRelations = AccountReceivable & {
+  sourceAccount: Account;
+  payments: (ReceivablePayment & { destinationAccount: Account })[];
+};
+
+export function mapReceivablePayment(
+  payment: ReceivablePayment & { destinationAccount: Account }
+): ReceivablePaymentData {
+  return {
+    id: payment.id,
+    amount: toNumber(payment.amount),
+    paymentDate: payment.paymentDate.toISOString(),
+    destinationAccount: payment.destinationAccount.name,
+    notes: payment.notes ?? undefined,
+  };
+}
+
+export function mapAccountReceivable(
+  receivable: ReceivableWithRelations
+): AccountReceivableData {
+  const principal = toNumber(receivable.principalAmount);
+  const outstanding = toNumber(receivable.outstandingBalance);
+  const collected = Math.max(principal - outstanding, 0);
+  const progressPercent =
+    principal > 0 ? Math.min((collected / principal) * 100, 100) : 0;
+
+  return {
+    id: receivable.id,
+    debtorName: receivable.debtorName,
+    principalAmount: principal,
+    outstandingBalance: outstanding,
+    interestRate: toNumber(receivable.interestRate),
+    loanDate: receivable.loanDate.toISOString(),
+    status: receivable.status,
+    sourceAccount: receivable.sourceAccount.name,
+    sourceAccountId: receivable.sourceAccountId,
+    notes: receivable.notes ?? undefined,
+    collectedAmount: collected,
+    progressPercent,
+    payments: receivable.payments.map(mapReceivablePayment),
   };
 }

@@ -23,6 +23,13 @@ export const transactionTypeLabels = {
   EXPENSE: "Gasto",
 } as const;
 
+export const receivableStatusLabels = {
+  ACTIVE: "Activo",
+  PAID: "Pagado",
+  DEFAULTED: "En mora",
+  CANCELLED: "Cancelado",
+} as const;
+
 export const paymentMethodFormLabels = paymentMethodLabels;
 
 export const accountTypeIcons: Record<AccountType, string> = {

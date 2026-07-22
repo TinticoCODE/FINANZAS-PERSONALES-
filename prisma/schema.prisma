@@ -38,13 +38,21 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts     Account[]
-  categories   Category[]
-  transactions Transaction[]
-  creditCards  CreditCard[]
-  budgets      Budget[]
-  savingsGoals SavingsGoal[]
-  reminders    Reminder[]
+  accounts            Account[]
+  categories          Category[]
+  transactions        Transaction[]
+  creditCards           CreditCard[]
+  budgets               Budget[]
+  savingsGoals          SavingsGoal[]
+  reminders             Reminder[]
+  accountReceivables    AccountReceivable[]
+}
+
+enum ReceivableStatus {
+  ACTIVE
+  PAID
+  DEFAULTED
+  CANCELLED
 }
 
 model Account {
@@ -60,8 +68,10 @@ model Account {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions         Transaction[]
+  receivablesDisbursed AccountReceivable[] @relation("DisbursementAccount")
+  receivablePayments   ReceivablePayment[] @relation("CollectionAccount")
 
   @@index([userId])
 }
@@ -192,4 +202,42 @@ model Reminder {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, dueDate])
+}
+
+model AccountReceivable {
+  id                 String           @id @default(cuid())
+  userId             String
+  debtorName         String
+  principalAmount    Decimal          @db.Decimal(12, 2)
+  outstandingBalance Decimal          @db.Decimal(12, 2)
+  interestRate       Decimal          @default(0) @db.Decimal(5, 2)
+  loanDate           DateTime
+  status             ReceivableStatus @default(ACTIVE)
+  sourceAccountId    String
+  notes              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceAccount Account             @relation("DisbursementAccount", fields: [sourceAccountId], references: [id])
+  payments      ReceivablePayment[]
+
+  @@index([userId, status])
+  @@index([sourceAccountId])
+}
+
+model ReceivablePayment {
+  id                   String   @id @default(cuid())
+  receivableId         String
+  amount               Decimal  @db.Decimal(12, 2)
+  paymentDate          DateTime
+  destinationAccountId String
+  notes                String?
+  createdAt            DateTime @default(now())
+
+  receivable         AccountReceivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  destinationAccount Account           @relation("CollectionAccount", fields: [destinationAccountId], references: [id])
+
+  @@index([receivableId])
+  @@index([destinationAccountId])
 }

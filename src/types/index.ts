@@ -80,6 +80,38 @@ export type ReminderData = {
   isRead: boolean;
 };
 
+export type ReceivablePaymentData = {
+  id: string;
+  amount: number;
+  paymentDate: string;
+  destinationAccount: string;
+  notes?: string;
+};
+
+export type AccountReceivableData = {
+  id: string;
+  debtorName: string;
+  principalAmount: number;
+  outstandingBalance: number;
+  interestRate: number;
+  loanDate: string;
+  status: string;
+  sourceAccount: string;
+  sourceAccountId: string;
+  notes?: string;
+  collectedAmount: number;
+  progressPercent: number;
+  payments: ReceivablePaymentData[];
+};
+
+export type LoansSummaryData = {
+  totalOutstanding: number;
+  totalPrincipalLent: number;
+  totalCollected: number;
+  activeLoans: number;
+  paidLoans: number;
+};
+
 export type ChartDataPoint = {
   name: string;
   value: number;

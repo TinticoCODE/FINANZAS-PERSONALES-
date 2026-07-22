@@ -18,6 +18,7 @@ function revalidateAll() {
   revalidatePath("/cards");
   revalidatePath("/budgets");
   revalidatePath("/goals");
+  revalidatePath("/loans");
   revalidatePath("/calendar");
   revalidatePath("/reports");
 }
@@ -362,5 +363,137 @@ export async function markReminderRead(id: string) {
     where: { id, userId },
     data: { isRead: true },
   });
+  revalidateAll();
+}
+
+export async function createAccountReceivable(data: {
+  debtorName: string;
+  principalAmount: number;
+  sourceAccountId: string;
+  loanDate: string;
+  interestRate?: number;
+  notes?: string;
+}) {
+  const userId = await getDefaultUserId();
+  const amount = data.principalAmount;
+
+  if (amount <= 0) throw new Error("El monto del préstamo debe ser mayor a cero");
+
+  await prisma.$transaction(async (tx) => {
+    const account = await tx.account.findFirst({
+      where: { id: data.sourceAccountId, userId, isActive: true },
+    });
+    if (!account) throw new Error("Cuenta bancaria no encontrada");
+
+    const balance = toNumber(account.balance);
+    if (balance < amount) {
+      throw new Error("Saldo insuficiente en la cuenta seleccionada");
+    }
+
+    await tx.account.update({
+      where: { id: data.sourceAccountId },
+      data: { balance: { decrement: amount } },
+    });
+
+    await tx.accountReceivable.create({
+      data: {
+        userId,
+        debtorName: data.debtorName.trim(),
+        principalAmount: amount,
+        outstandingBalance: amount,
+        interestRate: data.interestRate ?? 0,
+        loanDate: new Date(data.loanDate),
+        sourceAccountId: data.sourceAccountId,
+        notes: data.notes,
+        status: "ACTIVE",
+      },
+    });
+  });
+
+  revalidateAll();
+}
+
+export async function registerReceivablePayment(data: {
+  receivableId: string;
+  amount: number;
+  destinationAccountId: string;
+  paymentDate: string;
+  notes?: string;
+}) {
+  const userId = await getDefaultUserId();
+  const amount = data.amount;
+
+  if (amount <= 0) throw new Error("El abono debe ser mayor a cero");
+
+  await prisma.$transaction(async (tx) => {
+    const receivable = await tx.accountReceivable.findFirst({
+      where: { id: data.receivableId, userId },
+    });
+    if (!receivable) throw new Error("Préstamo no encontrado");
+    if (receivable.status !== "ACTIVE") {
+      throw new Error("Solo se pueden registrar abonos en préstamos activos");
+    }
+
+    const outstanding = toNumber(receivable.outstandingBalance);
+    if (amount > outstanding) {
+      throw new Error("El abono supera el saldo pendiente del deudor");
+    }
+
+    const destination = await tx.account.findFirst({
+      where: { id: data.destinationAccountId, userId, isActive: true },
+    });
+    if (!destination) throw new Error("Cuenta receptora no encontrada");
+
+    const newOutstanding = outstanding - amount;
+
+    await tx.accountReceivable.update({
+      where: { id: data.receivableId },
+      data: {
+        outstandingBalance: newOutstanding,
+        status: newOutstanding <= 0 ? "PAID" : "ACTIVE",
+      },
+    });
+
+    await tx.account.update({
+      where: { id: data.destinationAccountId },
+      data: { balance: { increment: amount } },
+    });
+
+    await tx.receivablePayment.create({
+      data: {
+        receivableId: data.receivableId,
+        amount,
+        paymentDate: new Date(data.paymentDate),
+        destinationAccountId: data.destinationAccountId,
+        notes: data.notes,
+      },
+    });
+  });
+
+  revalidateAll();
+}
+
+export async function deleteAccountReceivable(id: string) {
+  const userId = await getDefaultUserId();
+
+  await prisma.$transaction(async (tx) => {
+    const receivable = await tx.accountReceivable.findFirst({
+      where: { id, userId },
+      include: { _count: { select: { payments: true } } },
+    });
+    if (!receivable) return;
+
+    if (receivable._count.payments > 0) {
+      throw new Error("No puedes eliminar un préstamo que ya tiene abonos registrados");
+    }
+
+    await tx.account.update({
+      where: { id: receivable.sourceAccountId },
+      data: { balance: { increment: toNumber(receivable.outstandingBalance) } },
+    });
+
+    await tx.accountReceivable.delete({ where: { id } });
+  });
+
   revalidateAll();
 }
