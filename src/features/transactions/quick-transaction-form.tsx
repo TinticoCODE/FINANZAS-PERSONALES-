@@ -23,7 +23,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { transactionTypeLabels } from "@/lib/labels";
+import {
+  paymentMethodLabels,
+  transactionTypeLabels,
+} from "@/lib/labels";
 
 type Option = { id: string; name: string; type?: string };
 
@@ -50,6 +53,11 @@ export function QuickTransactionForm({
   const [pending, startTransition] = useTransition();
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [paymentMethod, setPaymentMethod] =
+    useState<keyof typeof paymentMethodLabels>("DEBIT");
+
+  const isCashExpense = type === "EXPENSE" && paymentMethod === "CASH";
+  const showBankAccount = type === "INCOME" || !isCashExpense;
 
   const filteredCategories = categories.filter((c) => c.type === type);
   const selectedCategoryName =
@@ -60,6 +68,7 @@ export function QuickTransactionForm({
   const resetForm = () => {
     setAccountId("");
     setCategoryId("");
+    setPaymentMethod("DEBIT");
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -73,12 +82,12 @@ export function QuickTransactionForm({
 
     startTransition(async () => {
       await createTransaction({
-        accountId,
+        accountId: showBankAccount ? accountId || undefined : undefined,
         categoryId,
         type,
         amount: Number(formData.get("amount")),
         description: (formData.get("description") as string) || undefined,
-        paymentMethod: type === "INCOME" ? "TRANSFER" : "DEBIT",
+        paymentMethod: type === "INCOME" ? "TRANSFER" : paymentMethod,
         date: formData.get("date") as string,
       });
       handleOpenChange(false);
@@ -120,29 +129,59 @@ export function QuickTransactionForm({
             <Textarea id="qt-description" name="description" rows={2} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Categoría</Label>
+            <Select
+              value={categoryId}
+              onValueChange={(v) => setCategoryId(v ?? "")}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Seleccionar categoría">
+                  {selectedCategoryName}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {filteredCategories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {type === "EXPENSE" && (
             <div className="space-y-2">
-              <Label>Categoría</Label>
+              <Label>Método de pago</Label>
               <Select
-                value={categoryId}
-                onValueChange={(v) => setCategoryId(v ?? "")}
+                value={paymentMethod}
+                onValueChange={(v) => {
+                  const method = (v ?? "DEBIT") as keyof typeof paymentMethodLabels;
+                  setPaymentMethod(method);
+                  if (method === "CASH") setAccountId("");
+                }}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Seleccionar categoría">
-                    {selectedCategoryName}
-                  </SelectValue>
+                  <SelectValue>{paymentMethodLabels[paymentMethod]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {filteredCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
+                  {(Object.keys(paymentMethodLabels) as Array<
+                    keyof typeof paymentMethodLabels
+                  >)
+                    .filter((key) => key !== "CREDIT")
+                    .map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {paymentMethodLabels[key]}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
+          )}
+
+          {showBankAccount && (
             <div className="space-y-2">
-              <Label>Cuenta</Label>
+              <Label>Cuenta bancaria</Label>
               <Select
                 value={accountId}
                 onValueChange={(v) => setAccountId(v ?? "")}
@@ -161,7 +200,13 @@ export function QuickTransactionForm({
                 </SelectContent>
               </Select>
             </div>
-          </div>
+          )}
+
+          {isCashExpense && (
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              Pago en efectivo: no requiere cuenta bancaria.
+            </p>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="qt-date">Fecha</Label>
@@ -177,7 +222,11 @@ export function QuickTransactionForm({
           <DialogFooter>
             <Button
               type="submit"
-              disabled={pending || !accountId || !categoryId}
+              disabled={
+                pending ||
+                !categoryId ||
+                (showBankAccount ? !accountId : false)
+              }
             >
               {pending ? "Guardando..." : "Guardar"}
             </Button>

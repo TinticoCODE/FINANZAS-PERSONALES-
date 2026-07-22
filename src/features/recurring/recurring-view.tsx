@@ -86,6 +86,11 @@ export function RecurringView({
   const filteredCategories = categories.filter((c) => c.type === form.type);
   const isCredit = form.paymentMethod === "CREDIT" && form.type === "EXPENSE";
   const isCash = form.paymentMethod === "CASH" && form.type === "EXPENSE";
+  const showBankAccount =
+    form.type === "INCOME" ||
+    (form.type === "EXPENSE" &&
+      form.paymentMethod !== "CREDIT" &&
+      form.paymentMethod !== "CASH");
 
   const resetForm = () => {
     setForm({
@@ -216,14 +221,16 @@ export function RecurringView({
                     <Label>Método</Label>
                     <Select
                       value={form.paymentMethod}
-                      onValueChange={(v) =>
+                      onValueChange={(v) => {
+                        const method = (v ?? "DEBIT") as typeof form.paymentMethod;
                         setForm((f) => ({
                           ...f,
-                          paymentMethod: (v ?? "DEBIT") as typeof f.paymentMethod,
-                          accountId: v === "CREDIT" || v === "CASH" ? "" : f.accountId,
-                          creditCardId: v === "CREDIT" ? f.creditCardId : "",
-                        }))
-                      }
+                          paymentMethod: method,
+                          accountId:
+                            method === "CREDIT" || method === "CASH" ? "" : f.accountId,
+                          creditCardId: method === "CREDIT" ? f.creditCardId : "",
+                        }));
+                      }}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue>
@@ -291,7 +298,7 @@ export function RecurringView({
                   <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
                     Efectivo: no requiere cuenta bancaria.
                   </p>
-                ) : (
+                ) : showBankAccount ? (
                   <div className="space-y-2">
                     <Label>Cuenta</Label>
                     <Select
@@ -314,7 +321,7 @@ export function RecurringView({
                       </SelectContent>
                     </Select>
                   </div>
-                )}
+                ) : null}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -454,9 +461,9 @@ export function RecurringView({
                       !form.categoryId ||
                       (isCredit
                         ? !form.creditCardId
-                        : isCash
-                          ? false
-                          : !form.accountId)
+                        : showBankAccount
+                          ? !form.accountId
+                          : false)
                     }
                   >
                     {pending ? "Guardando..." : editItem ? "Actualizar" : "Crear"}

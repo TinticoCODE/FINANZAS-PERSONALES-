@@ -73,7 +73,12 @@ export function TransactionsView({
   const isCreditPurchase =
     form.paymentMethod === "CREDIT" && form.type === "EXPENSE";
   const isCashExpense =
-    form.paymentMethod === "CASH" && form.type === "EXPENSE";
+    form.type === "EXPENSE" && form.paymentMethod === "CASH";
+  const showBankAccount =
+    form.type === "INCOME" ||
+    (form.type === "EXPENSE" &&
+      form.paymentMethod !== "CREDIT" &&
+      form.paymentMethod !== "CASH");
 
   const resetForm = () => setForm(initialFormState);
 
@@ -133,8 +138,7 @@ export function TransactionsView({
   };
 
   const canCreateTransaction = true;
-  const requiresAccount =
-    form.type === "INCOME" || (!isCreditPurchase && !isCashExpense);
+  const requiresAccount = showBankAccount;
   const canSubmit =
     Boolean(form.categoryId) &&
     (isCreditPurchase
@@ -285,7 +289,7 @@ export function TransactionsView({
                   </div>
                 )}
 
-                {!isCreditPurchase && !isCashExpense && (
+                {showBankAccount && (
                   <div className="space-y-2">
                     <Label>Cuenta bancaria</Label>
                     <Select
