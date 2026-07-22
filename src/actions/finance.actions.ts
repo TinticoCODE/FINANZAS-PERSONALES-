@@ -366,6 +366,12 @@ export async function markReminderRead(id: string) {
   revalidateAll();
 }
 
+function revalidateLoans() {
+  revalidatePath("/loans");
+  revalidatePath("/accounts");
+  revalidatePath("/");
+}
+
 export async function createAccountReceivable(data: {
   debtorName: string;
   principalAmount: number;
@@ -373,44 +379,56 @@ export async function createAccountReceivable(data: {
   loanDate: string;
   interestRate?: number;
   notes?: string;
-}) {
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   const userId = await getDefaultUserId();
   const amount = data.principalAmount;
 
-  if (amount <= 0) throw new Error("El monto del préstamo debe ser mayor a cero");
+  if (amount <= 0) {
+    return { ok: false, error: "El monto del préstamo debe ser mayor a cero" };
+  }
 
-  await prisma.$transaction(async (tx) => {
-    const account = await tx.account.findFirst({
-      where: { id: data.sourceAccountId, userId, isActive: true },
+  if (!data.debtorName.trim()) {
+    return { ok: false, error: "Ingresa el nombre del deudor" };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const account = await tx.account.findFirst({
+        where: { id: data.sourceAccountId, userId, isActive: true },
+      });
+      if (!account) {
+        throw new Error("ACCOUNT_NOT_FOUND");
+      }
+
+      await tx.account.update({
+        where: { id: data.sourceAccountId },
+        data: { balance: { decrement: amount } },
+      });
+
+      await tx.accountReceivable.create({
+        data: {
+          userId,
+          debtorName: data.debtorName.trim(),
+          principalAmount: amount,
+          outstandingBalance: amount,
+          interestRate: data.interestRate ?? 0,
+          loanDate: new Date(data.loanDate),
+          sourceAccountId: data.sourceAccountId,
+          notes: data.notes,
+          status: "ACTIVE",
+        },
+      });
     });
-    if (!account) throw new Error("Cuenta bancaria no encontrada");
-
-    const balance = toNumber(account.balance);
-    if (balance < amount) {
-      throw new Error("Saldo insuficiente en la cuenta seleccionada");
+  } catch (err) {
+    if (err instanceof Error && err.message === "ACCOUNT_NOT_FOUND") {
+      return { ok: false, error: "Cuenta bancaria no encontrada" };
     }
+    console.error("createAccountReceivable failed:", err);
+    return { ok: false, error: "No se pudo registrar el préstamo" };
+  }
 
-    await tx.account.update({
-      where: { id: data.sourceAccountId },
-      data: { balance: { decrement: amount } },
-    });
-
-    await tx.accountReceivable.create({
-      data: {
-        userId,
-        debtorName: data.debtorName.trim(),
-        principalAmount: amount,
-        outstandingBalance: amount,
-        interestRate: data.interestRate ?? 0,
-        loanDate: new Date(data.loanDate),
-        sourceAccountId: data.sourceAccountId,
-        notes: data.notes,
-        status: "ACTIVE",
-      },
-    });
-  });
-
-  revalidateAll();
+  revalidateLoans();
+  return { ok: true };
 }
 
 export async function registerReceivablePayment(data: {
@@ -470,7 +488,7 @@ export async function registerReceivablePayment(data: {
     });
   });
 
-  revalidateAll();
+  revalidateLoans();
 }
 
 export async function deleteAccountReceivable(id: string) {
@@ -495,5 +513,5 @@ export async function deleteAccountReceivable(id: string) {
     await tx.accountReceivable.delete({ where: { id } });
   });
 
-  revalidateAll();
+  revalidateLoans();
 }

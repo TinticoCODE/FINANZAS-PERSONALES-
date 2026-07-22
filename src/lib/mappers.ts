@@ -164,7 +164,7 @@ export function mapAccountReceivable(
     interestRate: toNumber(receivable.interestRate),
     loanDate: receivable.loanDate.toISOString(),
     status: receivable.status,
-    sourceAccount: receivable.sourceAccount.name,
+    sourceAccount: receivable.sourceAccount?.name ?? "Cuenta eliminada",
     sourceAccountId: receivable.sourceAccountId,
     notes: receivable.notes ?? undefined,
     collectedAmount: collected,

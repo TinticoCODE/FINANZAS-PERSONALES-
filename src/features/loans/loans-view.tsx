@@ -69,22 +69,20 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
 
     setError(null);
     startTransition(async () => {
-      try {
-        await createAccountReceivable({
-          debtorName: formData.get("debtorName") as string,
-          principalAmount,
-          sourceAccountId,
-          loanDate: formData.get("loanDate") as string,
-          interestRate: Number(formData.get("interestRate") || 0),
-          notes: (formData.get("notes") as string) || undefined,
-        });
-        handleOpenChange(false);
-        router.refresh();
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "No se pudo registrar el préstamo"
-        );
+      const result = await createAccountReceivable({
+        debtorName: formData.get("debtorName") as string,
+        principalAmount,
+        sourceAccountId,
+        loanDate: formData.get("loanDate") as string,
+        interestRate: Number(formData.get("interestRate") || 0),
+        notes: (formData.get("notes") as string) || undefined,
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
+      handleOpenChange(false);
+      router.refresh();
     });
   };
 
