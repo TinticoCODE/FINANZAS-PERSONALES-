@@ -194,6 +194,12 @@ export type OverdueInstallmentData = SaleInstallmentData & {
   customerName?: string;
 };
 
+export type PendingInstallmentData = SaleInstallmentData & {
+  saleNumber: string;
+  customerName?: string;
+  customerPhone?: string;
+};
+
 export type BusinessDashboardData = {
   business: BusinessData;
   kpis: BusinessKpiData[];
@@ -222,5 +228,6 @@ export type BusinessDashboardData = {
   expenseCategories: { id: string; name: string; color: string }[];
   recentSales: BusinessSaleData[];
   overdueInstallments: OverdueInstallmentData[];
+  pendingInstallments: PendingInstallmentData[];
   personalAccounts: { id: string; name: string }[];
 };

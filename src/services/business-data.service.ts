@@ -11,6 +11,7 @@ import {
   mapBusinessProduct,
   mapBusinessSale,
   mapOverdueInstallment,
+  mapPendingInstallment,
 } from "@/lib/mappers";
 import type {
   BusinessDashboardData,
@@ -88,7 +89,7 @@ export async function getBusinessDashboard(
   const now = new Date();
   const { start, end } = monthRange(now.getFullYear(), now.getMonth() + 1);
 
-  const [cashFlow, profitability, ownerCapital, overdueInstallments, accounts] =
+  const [cashFlow, profitability, ownerCapital, overdueInstallments, pendingInstallments, accounts] =
     await Promise.all([
       getBusinessCashFlow(business.id),
       getProfitability(business.id, start, end),
@@ -103,6 +104,16 @@ export async function getBusinessDashboard(
         },
         orderBy: { dueDate: "asc" },
         take: 20,
+      }),
+      prisma.saleInstallment.findMany({
+        where: {
+          sale: { businessId: business.id },
+          status: { in: ["PENDING", "CURRENT", "PARTIAL", "OVERDUE"] },
+        },
+        include: {
+          sale: { include: { customer: true } },
+        },
+        orderBy: { dueDate: "asc" },
       }),
       prisma.account.findMany({
         where: { userId, isActive: true },
@@ -168,6 +179,9 @@ export async function getBusinessDashboard(
     })),
     recentSales: business.sales.map(mapBusinessSale),
     overdueInstallments: overdueInstallments.map(mapOverdueInstallment),
+    pendingInstallments: pendingInstallments
+      .filter((i) => Number(i.paidAmount) < Number(i.expectedAmount))
+      .map(mapPendingInstallment),
     personalAccounts: accounts,
   };
 }

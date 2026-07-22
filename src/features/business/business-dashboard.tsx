@@ -7,10 +7,9 @@ import { CapitalTransferDialog } from "@/features/business/capital-transfer-dial
 import { CreateProductDialog, ProductList } from "@/features/business/create-product-dialog";
 import { CreateSaleDialog } from "@/features/business/create-sale-dialog";
 import { SalesList } from "@/features/business/sales-list";
-import {
-  CustomerRiskBadge,
-  OverdueInstallmentsTable,
-} from "@/features/business/overdue-installments-table";
+import { CustomersList } from "@/features/business/customers-list";
+import { ReceivablesList } from "@/features/business/receivables-list";
+import { OverdueInstallmentsTable } from "@/features/business/overdue-installments-table";
 import { PageHeader } from "@/components/shared/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -66,6 +65,7 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Resumen</TabsTrigger>
+          <TabsTrigger value="receivables">Por cobrar</TabsTrigger>
           <TabsTrigger value="inventory">Inventario</TabsTrigger>
           <TabsTrigger value="sales">Ventas</TabsTrigger>
           <TabsTrigger value="customers">Clientes</TabsTrigger>
@@ -132,6 +132,17 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
           </Card>
         </TabsContent>
 
+        <TabsContent value="receivables" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Cuentas por cobrar</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ReceivablesList installments={data.pendingInstallments} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="inventory" className="mt-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -169,34 +180,7 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
               <CardTitle className="text-base">Clientes</CardTitle>
             </CardHeader>
             <CardContent>
-              {customers.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">
-                  Los clientes se crean al registrar ventas
-                </p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {customers.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between py-3 text-sm">
-                      <div>
-                        <p className="font-medium">{c.name}</p>
-                        {c.phone ? (
-                          <p className="inline-flex items-center gap-1 text-muted-foreground">
-                            <span className="text-xs">Contacto:</span> {c.phone}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">Sin teléfono</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <CustomerRiskBadge level={c.riskLevel} />
-                        <span className="text-muted-foreground">
-                          {formatCurrency(c.totalOutstanding)}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <CustomersList customers={customers} />
             </CardContent>
           </Card>
         </TabsContent>

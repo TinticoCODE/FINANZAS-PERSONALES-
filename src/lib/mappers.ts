@@ -36,6 +36,7 @@ import type {
   BusinessSaleData,
   SaleInstallmentData,
   OverdueInstallmentData,
+  PendingInstallmentData,
 } from "@/types";
 
 type TransactionWithRelations = Transaction & {
@@ -259,5 +260,16 @@ export function mapOverdueInstallment(
     ...mapSaleInstallment(inst),
     saleNumber: inst.sale.saleNumber,
     customerName: inst.sale.customer?.name,
+  };
+}
+
+export function mapPendingInstallment(
+  inst: OverdueWithRelations
+): PendingInstallmentData {
+  return {
+    ...mapSaleInstallment(inst),
+    saleNumber: inst.sale.saleNumber,
+    customerName: inst.sale.customer?.name,
+    customerPhone: inst.sale.customer?.phone ?? undefined,
   };
 }

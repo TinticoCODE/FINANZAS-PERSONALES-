@@ -290,13 +290,14 @@ export async function deleteBusinessSale(saleId: string) {
     if (sale.customerId) {
       await tx.businessCustomer.update({
         where: { id: sale.customerId },
-        data: { totalSales: { decrement: Number(sale.totalAmount) } },
+        data: {
+          totalSales: { decrement: Number(sale.totalAmount) },
+          totalOutstanding: { decrement: Math.max(Number(sale.totalAmount) - Number(sale.cashReceived), 0) },
+        },
       });
     }
 
-    const journalEntryId = sale.journalEntryId;
     await tx.businessSale.delete({ where: { id: saleId } });
-    await tx.businessJournalLine.deleteMany({ where: { journalEntryId } });
-    await tx.businessJournalEntry.delete({ where: { id: journalEntryId } });
+    // Conservar asiento original + anulación = neto cero en libros
   });
 }

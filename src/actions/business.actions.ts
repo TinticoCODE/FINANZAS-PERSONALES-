@@ -123,6 +123,39 @@ export async function createBusinessCustomer(data: {
   return customer.id;
 }
 
+export async function deleteBusinessCustomer(customerId: string) {
+  const userId = await getDefaultUserId();
+  const customer = await prisma.businessCustomer.findFirstOrThrow({
+    where: { id: customerId },
+    include: {
+      sales: { include: { installments: true } },
+      business: true,
+    },
+  });
+
+  if (customer.business.userId !== userId) {
+    throw new Error("No autorizado");
+  }
+
+  const hasPendingCredit = customer.sales.some((sale) =>
+    sale.installments.some(
+      (i) => Number(i.paidAmount) < Number(i.expectedAmount)
+    )
+  );
+  if (hasPendingCredit) {
+    throw new Error("No se puede eliminar: el cliente tiene cuotas pendientes");
+  }
+
+  if (customer.sales.length > 0) {
+    throw new Error(
+      "No se puede eliminar: el cliente tiene ventas registradas. Elimina las ventas primero."
+    );
+  }
+
+  await prisma.businessCustomer.delete({ where: { id: customerId } });
+  revalidateBusiness(customer.business.slug);
+}
+
 export async function createBusinessProduct(data: {
   businessId: string;
   name: string;
