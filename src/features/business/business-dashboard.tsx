@@ -51,11 +51,7 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
               businessId={business.id}
               accounts={data.personalAccounts}
             />
-            <CreateSaleDialog
-              businessId={business.id}
-              products={products}
-              customers={customers}
-            />
+            <CreateSaleDialog businessId={business.id} products={products} />
           </div>
         }
       />

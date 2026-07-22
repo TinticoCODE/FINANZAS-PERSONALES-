@@ -25,38 +25,30 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/format";
-import type { BusinessCustomerData, BusinessProductData } from "@/types";
+import type { BusinessProductData } from "@/types";
 
 type CreateSaleDialogProps = {
   businessId: string;
   products: BusinessProductData[];
-  customers: BusinessCustomerData[];
 };
 
 function productLabel(p: BusinessProductData) {
   return `${p.name} — ${formatCurrency(p.salePrice)}`;
 }
 
-export function CreateSaleDialog({
-  businessId,
-  products,
-  customers: initialCustomers,
-}: CreateSaleDialogProps) {
+export function CreateSaleDialog({ businessId, products }: CreateSaleDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [customerId, setCustomerId] = useState("");
   const [productId, setProductId] = useState(products[0]?.id ?? "");
   const [quantity, setQuantity] = useState("1");
   const [cashDown, setCashDown] = useState("0");
   const [installmentCount, setInstallmentCount] = useState("3");
-  const [newCustomerName, setNewCustomerName] = useState("");
-  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
 
   const product = products.find((p) => p.id === productId);
-  const selectedCustomer = customers.find((c) => c.id === customerId);
   const qty = Number(quantity) || 0;
   const total = product ? product.salePrice * qty : 0;
   const down = Number(cashDown) || 0;
@@ -78,38 +70,34 @@ export function CreateSaleDialog({
     });
   }, [credit, installments]);
 
-  async function ensureCustomer(): Promise<string | undefined> {
-    if (customerId) return customerId;
-    if (!newCustomerName.trim()) return undefined;
-    const id = await createBusinessCustomer({
-      businessId,
-      name: newCustomerName.trim(),
-      phone: newCustomerPhone.trim() || undefined,
-    });
-    setCustomers((prev) => [
-      ...prev,
-      {
-        id,
-        name: newCustomerName.trim(),
-        phone: newCustomerPhone.trim() || undefined,
-        riskLevel: "LOW",
-        totalOutstanding: 0,
-        overdueDaysMax: 0,
-      },
-    ]);
-    setCustomerId(id);
-    return id;
+  function resetForm() {
+    setProductId(products[0]?.id ?? "");
+    setQuantity("1");
+    setCashDown("0");
+    setInstallmentCount("3");
+    setCustomerName("");
+    setCustomerPhone("");
+    setError(null);
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next) resetForm();
+    setOpen(next);
   }
 
   function handleSubmit() {
-    if (!product || qty <= 0) return;
+    if (!product || qty <= 0 || !customerName.trim()) return;
     setError(null);
     startTransition(async () => {
       try {
-        const cid = await ensureCustomer();
+        const customerId = await createBusinessCustomer({
+          businessId,
+          name: customerName.trim(),
+          phone: customerPhone.trim() || undefined,
+        });
         await createSaleAction({
           businessId,
-          customerId: cid,
+          customerId,
           lines: [
             {
               productId: product.id,
@@ -123,7 +111,7 @@ export function CreateSaleDialog({
           installmentPlan: plan,
           saleDate: new Date().toISOString(),
         });
-        setOpen(false);
+        handleOpenChange(false);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Error al registrar la venta");
@@ -132,7 +120,7 @@ export function CreateSaleDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
           <Button>
@@ -201,38 +189,13 @@ export function CreateSaleDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="sale-customer">Cliente existente</Label>
-            <Select
-              value={customerId}
-              onValueChange={(v) => setCustomerId(v ?? "")}
-            >
-              <SelectTrigger id="sale-customer" className="w-full">
-                <span className="flex-1 truncate text-left">
-                  {selectedCustomer ? (
-                    selectedCustomer.name
-                  ) : (
-                    <span className="text-muted-foreground">
-                      Opcional — o crea uno abajo
-                    </span>
-                  )}
-                </span>
-              </SelectTrigger>
-              <SelectContent className="z-[200]">
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="sale-new-customer">O nuevo cliente</Label>
+            <Label htmlFor="sale-customer-name">Nombre del cliente</Label>
             <Input
-              id="sale-new-customer"
-              value={newCustomerName}
-              onChange={(e) => setNewCustomerName(e.target.value)}
-              placeholder="Nombre del cliente"
+              id="sale-customer-name"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Escribe el nombre del cliente"
+              required
             />
           </div>
           <div className="space-y-2">
@@ -240,8 +203,8 @@ export function CreateSaleDialog({
             <Input
               id="sale-customer-phone"
               type="tel"
-              value={newCustomerPhone}
-              onChange={(e) => setNewCustomerPhone(e.target.value)}
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
               placeholder="300 123 4567"
             />
           </div>
@@ -275,7 +238,13 @@ export function CreateSaleDialog({
         <DialogFooter>
           <Button
             onClick={handleSubmit}
-            disabled={pending || !product || qty <= 0 || products.length === 0}
+            disabled={
+              pending ||
+              !product ||
+              qty <= 0 ||
+              products.length === 0 ||
+              !customerName.trim()
+            }
           >
             {pending ? "Registrando..." : "Confirmar venta"}
           </Button>
