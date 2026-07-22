@@ -41,6 +41,14 @@ export function BudgetsView({ budgets, categories }: BudgetsViewProps) {
   const [categoryId, setCategoryId] = useState("");
   const now = new Date();
 
+  const selectedCategoryName =
+    categories.find((c) => c.id === categoryId)?.name ?? "";
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) setCategoryId("");
+  };
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -53,6 +61,7 @@ export function BudgetsView({ budgets, categories }: BudgetsViewProps) {
         year: now.getFullYear(),
       });
       setOpen(false);
+      setCategoryId("");
       router.refresh();
     });
   };
@@ -70,7 +79,7 @@ export function BudgetsView({ budgets, categories }: BudgetsViewProps) {
         title="Presupuestos"
         description="Controla tus gastos por categoría este mes"
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger render={<Button size="sm" className="gap-2" disabled={categories.length === 0} />}>
               <Plus className="h-4 w-4" />
               Nuevo presupuesto
@@ -82,11 +91,20 @@ export function BudgetsView({ budgets, categories }: BudgetsViewProps) {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label>Categoría</Label>
-                  <Select value={categoryId} onValueChange={(v) => setCategoryId(v ?? "")}>
-                    <SelectTrigger><SelectValue placeholder="Seleccionar categoría" /></SelectTrigger>
+                  <Select
+                    value={categoryId}
+                    onValueChange={(v) => setCategoryId(v ?? "")}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Seleccionar categoría">
+                        {selectedCategoryName}
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent>
                       {categories.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
