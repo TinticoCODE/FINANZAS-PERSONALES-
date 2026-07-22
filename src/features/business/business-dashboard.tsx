@@ -142,7 +142,7 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
             </CardHeader>
             <CardContent>
               {trackInventory ? (
-                <ProductList products={products} />
+                <ProductList businessId={business.id} products={products} />
               ) : (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   Negocio de servicios — inventario no aplica
