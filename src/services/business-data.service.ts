@@ -153,16 +153,6 @@ export async function getBusinessDashboard(
       gradient: "from-amber-500/10 to-orange-500/5",
       subtitle: `${overdueInstallments.length} en mora`,
     },
-    {
-      id: "net-profit",
-      title: "Beneficio neto (mes)",
-      value: profitability.netProfit,
-      previousValue: profitability.grossProfit,
-      icon: "trending-up",
-      color: "#8b5cf6",
-      gradient: "from-violet-500/10 to-purple-500/5",
-      subtitle: `Margen ${profitability.netMarginPct.toFixed(1)}%`,
-    },
   ];
 
   return {

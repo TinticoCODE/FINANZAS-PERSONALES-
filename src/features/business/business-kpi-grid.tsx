@@ -25,7 +25,7 @@ type BusinessKpiGridProps = {
 
 export function BusinessKpiGrid({ kpis }: BusinessKpiGridProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {kpis.map((kpi, index) => {
         const Icon = iconMap[kpi.icon] ?? Wallet;
         return (

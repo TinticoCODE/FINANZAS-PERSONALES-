@@ -109,10 +109,8 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
                 <Row label="COGS" value={-profitability.cogs} muted />
                 <Row label="Margen bruto" value={profitability.grossProfit} />
                 <Row label="Gastos operativos" value={-profitability.operatingExpenses} muted />
-                <Row label="Beneficio neto" value={profitability.netProfit} strong />
                 <div className="border-t pt-2 text-xs text-muted-foreground">
-                  Margen neto {formatPercent(profitability.netMarginPct)} · ROI{" "}
-                  {formatPercent(profitability.roiPct)}
+                  ROI {formatPercent(profitability.roiPct)}
                 </div>
               </CardContent>
             </Card>
