@@ -23,7 +23,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/shared/page-header";
@@ -32,7 +31,7 @@ import { ReceivableList } from "@/features/loans/receivable-list";
 import { formatCurrency } from "@/lib/format";
 import type { AccountReceivableData, LoansSummaryData } from "@/types";
 
-type AccountOption = { id: string; name: string };
+type AccountOption = { id: string; name: string; balance: number };
 
 type LoansViewProps = {
   loans: AccountReceivableData[];
@@ -45,26 +44,55 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [sourceAccountId, setSourceAccountId] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const selectedAccountName =
-    accounts.find((a) => a.id === sourceAccountId)?.name ?? "";
+  const selectedAccount = accounts.find((a) => a.id === sourceAccountId);
+
+  function resetForm() {
+    setSourceAccountId("");
+    setError(null);
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next) resetForm();
+    setOpen(next);
+  }
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const principalAmount = Number(formData.get("principalAmount"));
+    const account = accounts.find((a) => a.id === sourceAccountId);
 
+    if (!account) {
+      setError("Selecciona la cuenta de origen del dinero");
+      return;
+    }
+    if (principalAmount > account.balance) {
+      setError(
+        `Saldo insuficiente en ${account.name}. Disponible: ${formatCurrency(account.balance)}`
+      );
+      return;
+    }
+
+    setError(null);
     startTransition(async () => {
-      await createAccountReceivable({
-        debtorName: formData.get("debtorName") as string,
-        principalAmount: Number(formData.get("principalAmount")),
-        sourceAccountId,
-        loanDate: formData.get("loanDate") as string,
-        interestRate: Number(formData.get("interestRate") || 0),
-        notes: (formData.get("notes") as string) || undefined,
-      });
-      setOpen(false);
-      setSourceAccountId("");
-      router.refresh();
+      try {
+        await createAccountReceivable({
+          debtorName: formData.get("debtorName") as string,
+          principalAmount,
+          sourceAccountId,
+          loanDate: formData.get("loanDate") as string,
+          interestRate: Number(formData.get("interestRate") || 0),
+          notes: (formData.get("notes") as string) || undefined,
+        });
+        handleOpenChange(false);
+        router.refresh();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "No se pudo registrar el préstamo"
+        );
+      }
     });
   };
 
@@ -117,19 +145,19 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
         title="Préstamos a terceros"
         description="Cuentas por cobrar — activos fuera de tus cuentas bancarias"
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogTrigger
               render={
                 <Button
                   size="sm"
                   className="gap-2"
                   disabled={accounts.length === 0}
-                />
+                >
+                  <Plus className="h-4 w-4" />
+                  Nuevo préstamo
+                </Button>
               }
-            >
-              <Plus className="h-4 w-4" />
-              Nuevo préstamo
-            </DialogTrigger>
+            />
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Nuevo préstamo a tercero</DialogTitle>
@@ -174,26 +202,35 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Cuenta bancaria de origen</Label>
+                  <Label htmlFor="loan-source-account">Cuenta bancaria de origen</Label>
                   <Select
                     value={sourceAccountId}
-                    onValueChange={(v) => setSourceAccountId(v ?? "")}
+                    onValueChange={(v) => {
+                      setSourceAccountId(v ?? "");
+                      setError(null);
+                    }}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="¿De dónde salió el dinero?">
-                        {selectedAccountName}
-                      </SelectValue>
+                    <SelectTrigger id="loan-source-account" className="w-full">
+                      <span className="flex-1 truncate text-left">
+                        {selectedAccount ? (
+                          `${selectedAccount.name} · ${formatCurrency(selectedAccount.balance)}`
+                        ) : (
+                          <span className="text-muted-foreground">
+                            ¿De dónde salió el dinero?
+                          </span>
+                        )}
+                      </span>
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[200]">
                       {accounts.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
-                          {a.name}
+                          {a.name} · {formatCurrency(a.balance)} disponible
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <p className="text-xs text-muted-foreground rounded-lg bg-muted/50 p-2">
+                <p className="rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
                   Partida doble: se restará el monto de la cuenta seleccionada y
                   quedará registrado como activo en cuentas por cobrar. No se
                   contabiliza como gasto.
@@ -202,11 +239,9 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
                   <Label htmlFor="notes">Notas (opcional)</Label>
                   <Textarea id="notes" name="notes" rows={2} />
                 </div>
+                {error && <p className="text-sm text-destructive">{error}</p>}
                 <DialogFooter>
-                  <Button
-                    type="submit"
-                    disabled={pending || !sourceAccountId}
-                  >
+                  <Button type="submit" disabled={pending || !sourceAccountId}>
                     {pending ? "Registrando..." : "Registrar préstamo"}
                   </Button>
                 </DialogFooter>

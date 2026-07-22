@@ -185,7 +185,7 @@ export async function getLoansData() {
     prisma.account.findMany({
       where: { userId, isActive: true },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, balance: true },
     }),
   ]);
 
@@ -201,7 +201,11 @@ export async function getLoansData() {
     paidLoans: loans.filter((l) => l.status === "PAID").length,
   };
 
-  return { loans, summary, accounts };
+  return { loans, summary, accounts: accounts.map((a) => ({
+    id: a.id,
+    name: a.name,
+    balance: toNumber(a.balance),
+  })) };
 }
 
 export async function getReminders() {

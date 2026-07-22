@@ -20,7 +20,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -35,7 +34,7 @@ import { receivableStatusLabels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { AccountReceivableData } from "@/types";
 
-type AccountOption = { id: string; name: string };
+type AccountOption = { id: string; name: string; balance?: number };
 
 type ReceivableListProps = {
   loans: AccountReceivableData[];
@@ -74,16 +73,20 @@ export function ReceivableList({
     const formData = new FormData(event.currentTarget);
 
     startTransition(async () => {
-      await registerReceivablePayment({
-        receivableId: selectedLoan.id,
-        amount: Number(formData.get("amount")),
-        destinationAccountId,
-        paymentDate: formData.get("paymentDate") as string,
-        notes: (formData.get("notes") as string) || undefined,
-      });
-      setPaymentOpen(false);
-      setSelectedLoan(null);
-      onPaymentRegistered?.();
+      try {
+        await registerReceivablePayment({
+          receivableId: selectedLoan.id,
+          amount: Number(formData.get("amount")),
+          destinationAccountId,
+          paymentDate: formData.get("paymentDate") as string,
+          notes: (formData.get("notes") as string) || undefined,
+        });
+        setPaymentOpen(false);
+        setSelectedLoan(null);
+        onPaymentRegistered?.();
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Error al registrar abono");
+      }
     });
   };
 
@@ -267,11 +270,15 @@ export function ReceivableList({
                   onValueChange={(v) => setDestinationAccountId(v ?? "")}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="¿A qué cuenta entra el dinero?">
-                      {selectedAccountName}
-                    </SelectValue>
+                    <span className="flex-1 truncate text-left">
+                      {selectedAccountName || (
+                        <span className="text-muted-foreground">
+                          ¿A qué cuenta entra el dinero?
+                        </span>
+                      )}
+                    </span>
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[200]">
                     {accounts.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         {a.name}
