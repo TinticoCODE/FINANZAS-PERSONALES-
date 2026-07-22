@@ -101,7 +101,7 @@ export function CardsView({ cards }: CardsViewProps) {
                     <Input id="paymentDueDate" name="paymentDueDate" type="number" min="1" max="31" required />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="interestRate">Tasa (%)</Label>
+                    <Label htmlFor="interestRate">Tasa Efectiva Anual — TEA (%)</Label>
                     <Input id="interestRate" name="interestRate" type="number" min="0" step="0.01" defaultValue="0" />
                   </div>
                 </div>

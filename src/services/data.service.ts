@@ -9,8 +9,13 @@ import {
   mapTransaction,
 } from "@/lib/mappers";
 import { getDefaultUserId } from "@/lib/user";
+import {
+  calculatePaymentToAvoidInterest,
+  type CreditCardPurchase,
+} from "@/services/credit-card.service";
 import type {
   ChartDataPoint,
+  CreditCardData,
   MonthlyDataPoint,
   StatCardData,
 } from "@/types";
@@ -24,6 +29,63 @@ function monthRange(year: number, month: number) {
 function previousMonth(year: number, month: number) {
   if (month === 1) return { year: year - 1, month: 12 };
   return { year, month: month - 1 };
+}
+
+async function enrichCreditCardsWithPayments(
+  cards: Awaited<ReturnType<typeof prisma.creditCard.findMany>>
+): Promise<CreditCardData[]> {
+  if (cards.length === 0) return [];
+
+  const userId = await getDefaultUserId();
+  const cardIds = cards.map((c) => c.id);
+
+  const purchases = await prisma.transaction.findMany({
+    where: {
+      userId,
+      creditCardId: { in: cardIds },
+      paymentMethod: "CREDIT",
+      type: "EXPENSE",
+    },
+    select: {
+      creditCardId: true,
+      date: true,
+      amount: true,
+      installments: true,
+    },
+  });
+
+  const purchasesByCard = new Map<string, CreditCardPurchase[]>();
+  for (const tx of purchases) {
+    if (!tx.creditCardId) continue;
+    const list = purchasesByCard.get(tx.creditCardId) ?? [];
+    list.push({
+      date: tx.date,
+      amount: toNumber(tx.amount),
+      installments: tx.installments ?? 1,
+    });
+    purchasesByCard.set(tx.creditCardId, list);
+  }
+
+  return cards.map((card) => {
+    const mapped = mapCreditCard(card);
+    const cardPurchases = purchasesByCard.get(card.id) ?? [];
+    const payment = calculatePaymentToAvoidInterest(
+      {
+        cutOffDate: card.cutOffDate,
+        paymentDueDate: card.paymentDueDate,
+        interestRate: toNumber(card.interestRate),
+      },
+      cardPurchases
+    );
+
+    return {
+      ...mapped,
+      paymentToAvoidInterest: payment.total,
+      singleInstallmentDue: payment.singleInstallmentCurrentCycle,
+      deferredInstallmentsDue: payment.deferredInstallmentsDue,
+      minPayment: Math.max(mapped.usedBalance * 0.05, 0),
+    };
+  });
 }
 
 export async function getAccounts() {
@@ -49,7 +111,7 @@ export async function getCreditCards() {
     where: { userId, isActive: true },
     orderBy: { createdAt: "asc" },
   });
-  return cards.map(mapCreditCard);
+  return enrichCreditCardsWithPayments(cards);
 }
 
 export async function getTransactions() {
@@ -274,7 +336,7 @@ export async function getDashboardData() {
 
   const categories = await prisma.category.findMany({
     where: { userId },
-    select: { id: true, name: true, color: true },
+    select: { id: true, name: true, color: true, type: true },
   });
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
 
@@ -335,14 +397,24 @@ export async function getDashboardData() {
 
   const monthLabel = now.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
 
+  const fabAccounts = await prisma.account.findMany({
+    where: { userId, isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true },
+  });
+
+  const enrichedCards = await enrichCreditCardsWithPayments(cards);
+
   return {
     stats,
     expenseByCategory,
     monthlyEvolution,
     cashFlowData,
     budgets,
-    creditCards: cards.map(mapCreditCard),
+    creditCards: enrichedCards,
     monthLabel,
+    fabAccounts,
+    fabCategories: categories.map(({ id, name, type }) => ({ id, name, type })),
   };
 }
 

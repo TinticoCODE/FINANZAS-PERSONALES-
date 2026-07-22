@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { createTransaction, deleteTransaction } from "@/actions/finance.actions";
@@ -30,15 +30,18 @@ import {
   paymentMethodLabels,
   transactionTypeLabels,
 } from "@/lib/labels";
+import { formatCurrency } from "@/lib/format";
+import { previewCreditPurchase } from "@/services/credit-card.service";
 import type { Transaction } from "@/types";
 
 type Option = { id: string; name: string; type?: string };
+type CreditCardOption = Option & { interestRate: number };
 
 type TransactionsViewProps = {
   transactions: Transaction[];
   accounts: Option[];
   categories: Option[];
-  creditCards: Option[];
+  creditCards: CreditCardOption[];
 };
 
 const initialFormState = {
@@ -47,6 +50,8 @@ const initialFormState = {
   accountId: "",
   categoryId: "",
   creditCardId: "",
+  installments: "1",
+  amount: "",
 };
 
 export function TransactionsView({
@@ -61,6 +66,8 @@ export function TransactionsView({
   const [form, setForm] = useState(initialFormState);
 
   const filteredCategories = categories.filter((c) => c.type === form.type);
+  const isCreditPurchase =
+    form.paymentMethod === "CREDIT" && form.type === "EXPENSE";
 
   const resetForm = () => setForm(initialFormState);
 
@@ -83,6 +90,9 @@ export function TransactionsView({
         description: (formData.get("description") as string) || undefined,
         paymentMethod: form.paymentMethod,
         date: formData.get("date") as string,
+        installments: isCreditPurchase
+          ? Math.max(1, Number(formData.get("installments")) || 1)
+          : 1,
       });
       handleOpenChange(false);
       router.refresh();
@@ -100,8 +110,20 @@ export function TransactionsView({
     categories.find((c) => c.id === form.categoryId)?.name ?? "";
   const selectedAccountName =
     accounts.find((a) => a.id === form.accountId)?.name ?? "";
-  const selectedCardName =
-    creditCards.find((c) => c.id === form.creditCardId)?.name ?? "";
+  const selectedCard = creditCards.find((c) => c.id === form.creditCardId);
+  const selectedCardName = selectedCard?.name ?? "";
+
+  const creditPreview = useMemo(() => {
+    if (form.paymentMethod !== "CREDIT" || !selectedCard) return null;
+    const parsedAmount = Number(form.amount);
+    const parsedInstallments = Math.max(1, Number(form.installments) || 1);
+    if (!parsedAmount || parsedAmount <= 0) return null;
+    return previewCreditPurchase(
+      parsedAmount,
+      parsedInstallments,
+      selectedCard.interestRate
+    );
+  }, [form.paymentMethod, form.amount, form.installments, selectedCard]);
 
   return (
     <div className="space-y-6">
@@ -146,7 +168,24 @@ export function TransactionsView({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="amount">Monto</Label>
-                    <Input id="amount" name="amount" type="number" min="0" step="0.01" required />
+                    <Input
+                      id="amount"
+                      name="amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      value={isCreditPurchase ? form.amount : undefined}
+                      onChange={
+                        isCreditPurchase
+                          ? (e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                amount: e.target.value,
+                              }))
+                          : undefined
+                      }
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -199,7 +238,7 @@ export function TransactionsView({
                     </Select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                {form.type === "EXPENSE" && (
                   <div className="space-y-2">
                     <Label>Método de pago</Label>
                     <Select
@@ -208,6 +247,9 @@ export function TransactionsView({
                         setForm((prev) => ({
                           ...prev,
                           paymentMethod: (v ?? "DEBIT") as keyof typeof paymentMethodLabels,
+                          creditCardId: v === "CREDIT" ? prev.creditCardId : "",
+                          installments: "1",
+                          amount: "",
                         }))
                       }
                     >
@@ -217,16 +259,99 @@ export function TransactionsView({
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {(Object.keys(paymentMethodLabels) as Array<keyof typeof paymentMethodLabels>).map(
-                          (key) => (
-                            <SelectItem key={key} value={key}>
-                              {paymentMethodLabels[key]}
-                            </SelectItem>
-                          )
-                        )}
+                        {(Object.keys(paymentMethodLabels) as Array<
+                          keyof typeof paymentMethodLabels
+                        >).map((key) => (
+                          <SelectItem key={key} value={key}>
+                            {paymentMethodLabels[key]}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
+                )}
+
+                {isCreditPurchase && creditCards.length > 0 && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Tarjeta de crédito</Label>
+                      <Select
+                        value={form.creditCardId}
+                        onValueChange={(v) =>
+                          setForm((prev) => ({ ...prev, creditCardId: v ?? "" }))
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Seleccionar tarjeta">
+                            {selectedCardName}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {creditCards.map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="installments">Número de cuotas</Label>
+                        <Input
+                          id="installments"
+                          name="installments"
+                          type="number"
+                          min="1"
+                          max="48"
+                          required
+                          value={form.installments}
+                          onChange={(e) =>
+                            setForm((prev) => ({
+                              ...prev,
+                              installments: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="date">Fecha exacta de transacción</Label>
+                        <Input
+                          id="date"
+                          name="date"
+                          type="date"
+                          defaultValue={new Date().toISOString().slice(0, 10)}
+                          required
+                        />
+                      </div>
+                    </div>
+                    {creditPreview && (
+                      <div className="rounded-xl border border-border/60 bg-muted/40 p-3 text-sm space-y-1">
+                        {Number(form.installments) === 1 ? (
+                          <p className="text-emerald-600 font-medium">
+                            1 cuota — 0% interés (periodo de gracia)
+                          </p>
+                        ) : (
+                          <>
+                            <p>
+                              Cuota mensual proyectada:{" "}
+                              <span className="font-semibold">
+                                {formatCurrency(creditPreview.monthlyPayment)}
+                              </span>
+                            </p>
+                            <p className="text-muted-foreground">
+                              TEA {selectedCard?.interestRate}% — intereses
+                              totales:{" "}
+                              {formatCurrency(creditPreview.totalInterest)}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {!isCreditPurchase && (
                   <div className="space-y-2">
                     <Label htmlFor="date">Fecha</Label>
                     <Input
@@ -237,35 +362,17 @@ export function TransactionsView({
                       required
                     />
                   </div>
-                </div>
-                {form.paymentMethod === "CREDIT" && creditCards.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Tarjeta de crédito</Label>
-                    <Select
-                      value={form.creditCardId}
-                      onValueChange={(v) =>
-                        setForm((prev) => ({ ...prev, creditCardId: v ?? "" }))
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Seleccionar tarjeta">
-                          {selectedCardName}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {creditCards.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 )}
+
                 <DialogFooter>
                   <Button
                     type="submit"
-                    disabled={pending || !form.accountId || !form.categoryId}
+                    disabled={
+                      pending ||
+                      !form.accountId ||
+                      !form.categoryId ||
+                      (isCreditPurchase && !form.creditCardId)
+                    }
                   >
                     {pending ? "Guardando..." : "Guardar"}
                   </Button>

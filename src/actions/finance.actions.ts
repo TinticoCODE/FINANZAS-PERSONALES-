@@ -128,8 +128,16 @@ export async function createTransaction(data: {
   paymentMethod: PaymentMethod;
   tags?: string[];
   date?: string;
+  installments?: number;
 }) {
   const userId = await getDefaultUserId();
+  const installments = Math.max(1, data.installments ?? 1);
+
+  if (data.paymentMethod === "CREDIT" && data.creditCardId) {
+    if (installments < 1 || installments > 48) {
+      throw new Error("El número de cuotas debe estar entre 1 y 48");
+    }
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.transaction.create({
@@ -142,6 +150,7 @@ export async function createTransaction(data: {
         amount: data.amount,
         description: data.description,
         paymentMethod: data.paymentMethod,
+        installments,
         tags: data.tags ?? [],
         date: data.date ? new Date(data.date) : new Date(),
       },
@@ -157,6 +166,47 @@ export async function createTransaction(data: {
   });
 
   revalidateAll();
+}
+
+export async function createCreditCardTransaction(data: {
+  creditCardId: string;
+  categoryId: string;
+  amount: number;
+  description?: string;
+  date: string;
+  installments: number;
+}) {
+  const userId = await getDefaultUserId();
+  const installments = Math.max(1, data.installments);
+
+  if (installments < 1 || installments > 48) {
+    throw new Error("El número de cuotas debe estar entre 1 y 48");
+  }
+
+  const [card, defaultAccount] = await Promise.all([
+    prisma.creditCard.findFirst({
+      where: { id: data.creditCardId, userId, isActive: true },
+    }),
+    prisma.account.findFirst({
+      where: { userId, isActive: true },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
+
+  if (!card) throw new Error("Tarjeta de crédito no encontrada");
+  if (!defaultAccount) throw new Error("Necesitas al menos una cuenta activa");
+
+  await createTransaction({
+    accountId: defaultAccount.id,
+    categoryId: data.categoryId,
+    creditCardId: data.creditCardId,
+    type: "EXPENSE",
+    amount: data.amount,
+    description: data.description,
+    paymentMethod: "CREDIT",
+    date: data.date,
+    installments,
+  });
 }
 
 export async function deleteTransaction(id: string) {

@@ -1,4 +1,5 @@
 import { StatCard } from "@/components/shared/stat-card";
+import { DashboardFab } from "@/features/dashboard/dashboard-fab";
 import { ExpenseByCategoryChart } from "@/features/dashboard/expense-chart";
 import { IncomeExpenseChart } from "@/features/dashboard/income-expense-chart";
 import { CashFlowChart } from "@/features/dashboard/cash-flow-chart";
@@ -11,7 +12,7 @@ export default async function DashboardPage() {
   const data = await getDashboardData();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-24">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Dashboard
@@ -43,6 +44,16 @@ export default async function DashboardPage() {
         <BudgetUsageChart data={data.budgets} />
         <CreditDebtChart cards={data.creditCards} />
       </div>
+
+      <DashboardFab
+        accounts={data.fabAccounts}
+        categories={data.fabCategories}
+        creditCards={data.creditCards.map((c) => ({
+          id: c.id,
+          name: c.name,
+          interestRate: c.interestRate,
+        }))}
+      />
     </div>
   );
 }

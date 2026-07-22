@@ -94,6 +94,7 @@ model Transaction {
   amount        Decimal         @db.Decimal(12, 2)
   description   String?
   paymentMethod PaymentMethod   @default(DEBIT)
+  installments  Int             @default(1)
   tags          String[]        @default([])
   attachmentUrl String?
   date          DateTime        @default(now())

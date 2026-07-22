@@ -39,6 +39,8 @@ export function mapTransaction(tx: TransactionWithRelations): TransactionUI {
     paymentMethod: paymentMethodLabels[tx.paymentMethod],
     description: tx.description ?? "",
     tags: tx.tags,
+    installments: tx.installments,
+    creditCardId: tx.creditCardId ?? undefined,
   };
 }
 

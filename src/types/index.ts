@@ -21,6 +21,8 @@ export type Transaction = {
   paymentMethod: string;
   description: string;
   tags: string[];
+  installments?: number;
+  creditCardId?: string;
 };
 
 export type CreditCardData = {
@@ -34,6 +36,10 @@ export type CreditCardData = {
   cutOffDate: number;
   paymentDueDate: number;
   color: string;
+  paymentToAvoidInterest?: number;
+  singleInstallmentDue?: number;
+  deferredInstallmentsDue?: number;
+  minPayment?: number;
 };
 
 export type BudgetData = {

@@ -19,7 +19,11 @@ export default async function TransactionsPage() {
       transactions={transactions}
       accounts={accounts.map((a) => ({ id: a.id, name: a.name }))}
       categories={categories.map((c) => ({ id: c.id, name: c.name, type: c.type }))}
-      creditCards={creditCards.map((c) => ({ id: c.id, name: c.name }))}
+      creditCards={creditCards.map((c) => ({
+        id: c.id,
+        name: c.name,
+        interestRate: c.interestRate,
+      }))}
     />
   );
 }

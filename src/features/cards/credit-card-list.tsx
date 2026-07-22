@@ -40,8 +40,8 @@ export function CreditCardList({ cards, onDelete, deleting }: CreditCardListProp
         const available = card.creditLimit - card.usedBalance;
         const daysToCutoff = getDaysUntil(card.cutOffDate);
         const daysToPayment = getDaysUntil(card.paymentDueDate);
-        const recommendedPayment = card.usedBalance * 0.3;
-        const minPayment = card.usedBalance * 0.05;
+        const recommendedPayment = card.paymentToAvoidInterest ?? card.usedBalance * 0.3;
+        const minPayment = card.minPayment ?? card.usedBalance * 0.05;
         const isHighUtilization = utilization > 70;
         const isPaymentSoon = daysToPayment <= 5;
 
@@ -139,7 +139,9 @@ export function CreditCardList({ cards, onDelete, deleting }: CreditCardListProp
                     <span>{formatCurrency(minPayment)}</span>
                   </div>
                   <div className="mt-1 flex justify-between font-medium">
-                    <span className="text-muted-foreground">Pago recomendado</span>
+                    <span className="text-muted-foreground">
+                      Pago para no generar intereses
+                    </span>
                     <span>{formatCurrency(recommendedPayment)}</span>
                   </div>
                 </div>
