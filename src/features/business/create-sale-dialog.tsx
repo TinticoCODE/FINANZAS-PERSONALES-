@@ -34,6 +34,10 @@ type CreateSaleDialogProps = {
   customers: BusinessCustomerData[];
 };
 
+function productLabel(p: BusinessProductData) {
+  return `${p.name} — ${formatCurrency(p.salePrice)}`;
+}
+
 export function CreateSaleDialog({
   businessId,
   products,
@@ -42,6 +46,7 @@ export function CreateSaleDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const [customers, setCustomers] = useState(initialCustomers);
   const [customerId, setCustomerId] = useState("");
   const [productId, setProductId] = useState(products[0]?.id ?? "");
@@ -95,26 +100,31 @@ export function CreateSaleDialog({
 
   function handleSubmit() {
     if (!product || qty <= 0) return;
+    setError(null);
     startTransition(async () => {
-      const cid = await ensureCustomer();
-      await createSaleAction({
-        businessId,
-        customerId: cid,
-        lines: [
-          {
-            productId: product.id,
-            description: product.name,
-            qty,
-            unitPrice: product.salePrice,
-            unitCost: product.unitCost,
-          },
-        ],
-        cashDownPayment: down,
-        installmentPlan: plan,
-        saleDate: new Date().toISOString(),
-      });
-      setOpen(false);
-      router.refresh();
+      try {
+        const cid = await ensureCustomer();
+        await createSaleAction({
+          businessId,
+          customerId: cid,
+          lines: [
+            {
+              productId: product.id,
+              description: product.name,
+              qty,
+              unitPrice: product.salePrice,
+              unitCost: product.unitCost,
+            },
+          ],
+          cashDownPayment: down,
+          installmentPlan: plan,
+          saleDate: new Date().toISOString(),
+        });
+        setOpen(false);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error al registrar la venta");
+      }
     });
   }
 
@@ -128,30 +138,44 @@ export function CreateSaleDialog({
           </Button>
         }
       />
-      <DialogContent className="max-w-lg">
+      <DialogContent className="z-[100] max-w-lg">
         <DialogHeader>
           <DialogTitle>Registrar venta</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label>Producto</Label>
-            <Select value={productId} onValueChange={(v) => v && setProductId(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} — {formatCurrency(p.salePrice)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="relative z-[100] space-y-4 py-2">
+          {products.length === 0 ? (
+            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+              Primero crea un producto en la pestaña Inventario.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="sale-product">Producto</Label>
+              <Select
+                value={productId}
+                onValueChange={(v) => v && setProductId(v)}
+              >
+                <SelectTrigger id="sale-product" className="w-full">
+                  <SelectValue placeholder="Selecciona un producto" />
+                </SelectTrigger>
+                <SelectContent className="z-[200]">
+                  {products.map((p) => (
+                    <SelectItem
+                      key={p.id}
+                      value={p.id}
+                      label={productLabel(p)}
+                    >
+                      {productLabel(p)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Cantidad</Label>
+              <Label htmlFor="sale-qty">Cantidad</Label>
               <Input
+                id="sale-qty"
                 type="number"
                 min={1}
                 value={quantity}
@@ -159,8 +183,9 @@ export function CreateSaleDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label>Enganche</Label>
+              <Label htmlFor="sale-down">Enganche</Label>
               <Input
+                id="sale-down"
                 type="number"
                 min={0}
                 value={cashDown}
@@ -169,14 +194,17 @@ export function CreateSaleDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Cliente existente</Label>
-            <Select value={customerId} onValueChange={(v) => v && setCustomerId(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Opcional si creas uno nuevo" />
+            <Label htmlFor="sale-customer">Cliente existente</Label>
+            <Select
+              value={customerId}
+              onValueChange={(v) => setCustomerId(v ?? "")}
+            >
+              <SelectTrigger id="sale-customer" className="w-full">
+                <SelectValue placeholder="Opcional — o crea uno abajo" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="z-[200]">
                 {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
+                  <SelectItem key={c.id} value={c.id} label={c.name}>
                     {c.name}
                   </SelectItem>
                 ))}
@@ -184,8 +212,9 @@ export function CreateSaleDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>O nuevo cliente</Label>
+            <Label htmlFor="sale-new-customer">O nuevo cliente</Label>
             <Input
+              id="sale-new-customer"
               value={newCustomerName}
               onChange={(e) => setNewCustomerName(e.target.value)}
               placeholder="Nombre del cliente"
@@ -193,8 +222,9 @@ export function CreateSaleDialog({
           </div>
           {credit > 0 && (
             <div className="space-y-2">
-              <Label>Cuotas</Label>
+              <Label htmlFor="sale-installments">Cuotas</Label>
               <Input
+                id="sale-installments"
                 type="number"
                 min={1}
                 max={24}
@@ -207,12 +237,15 @@ export function CreateSaleDialog({
             </div>
           )}
           <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-            <p>Total venta: <strong>{formatCurrency(total)}</strong></p>
+            <p>
+              Total venta: <strong>{formatCurrency(total)}</strong>
+            </p>
             <p className="text-muted-foreground">
               Asiento: DR CxC / CR Ventas
               {product && product.unitCost > 0 && " + COGS/Inventario"}
             </p>
           </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <Button
