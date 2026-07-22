@@ -4,16 +4,22 @@ import { revalidatePath } from "next/cache";
 import type {
   AccountType,
   PaymentMethod,
+  RecurrenceFrequency,
   ReminderType,
   TransactionType,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
-import { getDefaultUserId } from "@/lib/user";
+import { getDefaultUserId, getUserTimezone } from "@/lib/user";
+import {
+  computeNextRunAt,
+  localMidnightToUtc,
+} from "@/domain/billing/timezone";
 
 function revalidateAll() {
   revalidatePath("/");
   revalidatePath("/transactions");
+  revalidatePath("/recurring");
   revalidatePath("/accounts");
   revalidatePath("/cards");
   revalidatePath("/budgets");
@@ -21,6 +27,7 @@ function revalidateAll() {
   revalidatePath("/loans");
   revalidatePath("/calendar");
   revalidatePath("/reports");
+  revalidatePath("/settings");
 }
 
 async function applyTransactionEffects(params: {
@@ -196,7 +203,9 @@ export async function createTransaction(data: {
         paymentMethod: data.paymentMethod,
         installments,
         tags: data.tags ?? [],
-        date: data.date ? new Date(data.date) : new Date(),
+        date: data.date
+          ? parseLocalDateToUtc(data.date, await getUserTimezone())
+          : new Date(),
       },
     });
 
@@ -313,7 +322,9 @@ export async function createSavingsGoal(data: {
       name: data.name,
       targetAmount: data.targetAmount,
       savedAmount: data.savedAmount ?? 0,
-      targetDate: data.targetDate ? new Date(data.targetDate) : null,
+      targetDate: data.targetDate
+        ? parseLocalDateToUtc(data.targetDate, await getUserTimezone())
+        : null,
       color: data.color ?? "#10b981",
     },
   });
@@ -351,7 +362,7 @@ export async function createReminder(data: {
       title: data.title,
       description: data.description,
       type: data.type,
-      dueDate: new Date(data.dueDate),
+      dueDate: parseLocalDateToUtc(data.dueDate, await getUserTimezone()),
     },
   });
   revalidateAll();
@@ -364,6 +375,11 @@ export async function markReminderRead(id: string) {
     data: { isRead: true },
   });
   revalidateAll();
+}
+
+function parseLocalDateToUtc(dateStr: string, timezone: string): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return localMidnightToUtc({ year: y, month: m - 1, day: d }, timezone);
 }
 
 function revalidateLoans() {
@@ -412,7 +428,7 @@ export async function createAccountReceivable(data: {
           principalAmount: amount,
           outstandingBalance: amount,
           interestRate: data.interestRate ?? 0,
-          loanDate: new Date(data.loanDate),
+          loanDate: parseLocalDateToUtc(data.loanDate, await getUserTimezone()),
           sourceAccountId: data.sourceAccountId,
           notes: data.notes,
           status: "ACTIVE",
@@ -481,7 +497,7 @@ export async function registerReceivablePayment(data: {
       data: {
         receivableId: data.receivableId,
         amount,
-        paymentDate: new Date(data.paymentDate),
+        paymentDate: parseLocalDateToUtc(data.paymentDate, await getUserTimezone()),
         destinationAccountId: data.destinationAccountId,
         notes: data.notes,
       },
@@ -514,4 +530,125 @@ export async function deleteAccountReceivable(id: string) {
   });
 
   revalidateLoans();
+}
+
+export async function createRecurringTransaction(data: {
+  type: TransactionType;
+  amount: number;
+  categoryId: string;
+  accountId?: string;
+  creditCardId?: string;
+  paymentMethod: PaymentMethod;
+  description?: string;
+  frequency: RecurrenceFrequency;
+  dayOfMonth?: number;
+  dayOfWeek?: number;
+  monthOfYear?: number;
+  installments?: number;
+  startDate: string;
+}) {
+  const userId = await getDefaultUserId();
+  const timezone = await getUserTimezone();
+
+  validateTransactionFunding({
+    type: data.type,
+    paymentMethod: data.paymentMethod,
+    accountId: data.accountId,
+    creditCardId: data.creditCardId,
+  });
+
+  const nextRunAt = parseLocalDateToUtc(data.startDate, timezone);
+
+  await prisma.recurringTransaction.create({
+    data: {
+      userId,
+      accountId: data.accountId || null,
+      creditCardId: data.creditCardId || null,
+      categoryId: data.categoryId,
+      type: data.type,
+      amount: data.amount,
+      description: data.description,
+      frequency: data.frequency,
+      dayOfMonth: data.dayOfMonth ?? null,
+      dayOfWeek: data.dayOfWeek ?? null,
+      monthOfYear: data.monthOfYear ?? null,
+      paymentMethod: data.paymentMethod,
+      installments: Math.max(1, data.installments ?? 1),
+      nextRunAt,
+    },
+  });
+
+  revalidateAll();
+}
+
+export async function updateRecurringTransaction(
+  id: string,
+  data: {
+    amount?: number;
+    description?: string;
+    frequency?: RecurrenceFrequency;
+    dayOfMonth?: number | null;
+    dayOfWeek?: number | null;
+    monthOfYear?: number | null;
+    isActive?: boolean;
+    nextRunAt?: string;
+  }
+) {
+  const userId = await getDefaultUserId();
+  const timezone = await getUserTimezone();
+
+  const existing = await prisma.recurringTransaction.findFirst({
+    where: { id, userId },
+  });
+  if (!existing) throw new Error("Transacción recurrente no encontrada");
+
+  let nextRunAt = existing.nextRunAt;
+  if (data.nextRunAt) {
+    nextRunAt = parseLocalDateToUtc(data.nextRunAt, timezone);
+  } else if (
+    data.frequency ||
+    data.dayOfMonth !== undefined ||
+    data.dayOfWeek !== undefined ||
+    data.monthOfYear !== undefined
+  ) {
+    nextRunAt = computeNextRunAt({
+      frequency: data.frequency ?? existing.frequency,
+      timezone,
+      dayOfMonth: data.dayOfMonth ?? existing.dayOfMonth,
+      dayOfWeek: data.dayOfWeek ?? existing.dayOfWeek,
+      monthOfYear: data.monthOfYear ?? existing.monthOfYear,
+      afterUtc: existing.lastRunAt ?? new Date(),
+    });
+  }
+
+  await prisma.recurringTransaction.update({
+    where: { id, userId },
+    data: {
+      amount: data.amount,
+      description: data.description,
+      frequency: data.frequency,
+      dayOfMonth: data.dayOfMonth,
+      dayOfWeek: data.dayOfWeek,
+      monthOfYear: data.monthOfYear,
+      isActive: data.isActive,
+      nextRunAt,
+    },
+  });
+
+  revalidateAll();
+}
+
+export async function deleteRecurringTransaction(id: string) {
+  const userId = await getDefaultUserId();
+  await prisma.recurringTransaction.delete({ where: { id, userId } });
+  revalidateAll();
+}
+
+export async function toggleRecurringTransaction(id: string, isActive: boolean) {
+  const userId = await getDefaultUserId();
+  await prisma.recurringTransaction.update({
+    where: { id, userId },
+    data: { isActive },
+  });
+  revalidateAll();
 }

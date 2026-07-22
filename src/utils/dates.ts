@@ -60,3 +60,17 @@ export function isSameUserMonth(
   const b = utcToUserLocal(bUtc, timezone);
   return isSameYear(a, b) && isSameMonth(a, b);
 }
+
+/** Fecha local de hoy como yyyy-MM-dd (para inputs type=date). */
+export function todayIsoInTimezone(timezone = DEFAULT_TIMEZONE): string {
+  const local = utcToUserLocal(new Date(), timezone);
+  const y = local.getFullYear();
+  const m = String(local.getMonth() + 1).padStart(2, "0");
+  const d = String(local.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function getLocalMonthYear(timezone = DEFAULT_TIMEZONE) {
+  const local = utcToUserLocal(new Date(), timezone);
+  return { year: local.getFullYear(), month: local.getMonth() + 1 };
+}

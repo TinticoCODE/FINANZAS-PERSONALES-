@@ -37,6 +37,46 @@ export function getLocalHour(instantUtc: Date, timezone: string): number {
   return toUserLocalTime(instantUtc, timezone).getHours();
 }
 
+/** Mes calendario actual del usuario (month 1–12). */
+export function getCurrentLocalMonth(
+  timezone: string,
+  instantUtc: Date = new Date()
+): { year: number; month: number } {
+  const local = getLocalYmd(instantUtc, timezone);
+  return { year: local.year, month: local.month + 1 };
+}
+
+/** Rango UTC [inicio, fin] de un mes calendario en la TZ del usuario. month = 1–12. */
+export function monthRangeUtc(
+  year: number,
+  month: number,
+  timezone: string
+): { start: Date; end: Date } {
+  const lastDay = new Date(year, month, 0).getDate();
+  const start = localMidnightToUtc({ year, month: month - 1, day: 1 }, timezone);
+  const end = fromZonedTime(
+    new Date(year, month - 1, lastDay, 23, 59, 59, 999),
+    timezone
+  );
+  return { start, end };
+}
+
+export function previousLocalMonth(year: number, month: number) {
+  if (month === 1) return { year: year - 1, month: 12 };
+  return { year, month: month - 1 };
+}
+
+export function localYmdMatches(
+  instantUtc: Date,
+  year: number,
+  month: number,
+  day: number,
+  timezone: string
+): boolean {
+  const local = getLocalYmd(instantUtc, timezone);
+  return local.year === year && local.month === month && local.day === day;
+}
+
 /** Día efectivo de corte cuando el mes tiene menos días (ej. 31 → 30 en junio). */
 export function effectiveCutoffDay(
   cutOffDate: number,

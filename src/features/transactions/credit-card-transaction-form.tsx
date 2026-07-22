@@ -23,6 +23,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/format";
 import { previewCreditPurchase } from "@/services/credit-card.service";
+import { todayIsoInTimezone } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 
 type Option = { id: string; name: string };
 
@@ -44,6 +46,8 @@ export function CreditCardTransactionForm({
   creditCards,
 }: CreditCardTransactionFormProps) {
   const router = useRouter();
+  const timezone = useUserTimezone();
+  const todayIso = useMemo(() => todayIsoInTimezone(timezone), [timezone]);
   const [pending, startTransition] = useTransition();
   const [creditCardId, setCreditCardId] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -180,7 +184,7 @@ export function CreditCardTransactionForm({
               id="cc-date"
               name="date"
               type="date"
-              defaultValue={new Date().toISOString().slice(0, 10)}
+              defaultValue={todayIso}
               required
             />
           </div>

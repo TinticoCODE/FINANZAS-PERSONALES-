@@ -90,3 +90,20 @@ export const salePaymentTermsLabels = {
   CREDIT_INSTALLMENTS: "Crédito",
   MIXED: "Mixto",
 } as const;
+
+export const recurrenceFrequencyLabels = {
+  DAILY: "Diaria",
+  WEEKLY: "Semanal",
+  MONTHLY: "Mensual",
+  YEARLY: "Anual",
+} as const;
+
+export const dayOfWeekLabels = [
+  "Domingo",
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+] as const;

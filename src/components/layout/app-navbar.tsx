@@ -16,6 +16,8 @@ import { GlobalSearch } from "@/features/search/global-search";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { LogoutMenuItem } from "@/features/auth/logout-menu-item";
+import { formatUserDate, formatUserRelative } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import type { ReminderData, Transaction, CreditCardData, AccountData, BudgetData } from "@/types";
 
 type SearchData = {
@@ -36,6 +38,7 @@ type AppNavbarProps = {
 export function AppNavbar({ reminders, searchData, userName = "Admin" }: AppNavbarProps) {
   const { theme, setTheme } = useTheme();
   const { setMobileOpen } = useSidebar();
+  const timezone = useUserTimezone();
   const unreadCount = reminders.filter((r) => !r.isRead).length;
 
   return (
@@ -88,7 +91,11 @@ export function AppNavbar({ reminders, searchData, userName = "Admin" }: AppNavb
                 <DropdownMenuItem key={reminder.id} className="flex flex-col items-start gap-1 py-3">
                   <span className="font-medium">{reminder.title}</span>
                   <span className="text-xs text-muted-foreground">
-                    {reminder.description}
+                    {formatUserDate(reminder.dueDate, "d MMM yyyy", timezone)}
+                    {reminder.description ? ` · ${reminder.description}` : ""}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/80">
+                    {formatUserRelative(reminder.dueDate, timezone)}
                   </span>
                 </DropdownMenuItem>
               ))

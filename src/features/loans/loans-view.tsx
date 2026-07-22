@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { HandCoins, Plus, TrendingUp, Users, Wallet } from "lucide-react";
 import {
@@ -28,6 +28,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ReceivableList } from "@/features/loans/receivable-list";
+import { todayIsoInTimezone } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import { formatCurrency } from "@/lib/format";
 import type { AccountReceivableData, LoansSummaryData } from "@/types";
 
@@ -41,6 +43,8 @@ type LoansViewProps = {
 
 export function LoansView({ loans, summary, accounts }: LoansViewProps) {
   const router = useRouter();
+  const timezone = useUserTimezone();
+  const todayIso = useMemo(() => todayIsoInTimezone(timezone), [timezone]);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [sourceAccountId, setSourceAccountId] = useState("");
@@ -187,7 +191,7 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
                     id="loanDate"
                     name="loanDate"
                     type="date"
-                    defaultValue={new Date().toISOString().slice(0, 10)}
+                    defaultValue={todayIso}
                     required
                   />
                 </div>

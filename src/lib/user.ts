@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { defaultCategoryColors } from "@/lib/labels";
 import { getSession } from "@/lib/session";
+import { DEFAULT_TIMEZONE } from "@/domain/billing/timezone";
 
 const defaultCategories = [
   { name: "Salario", type: "INCOME" as const },
@@ -42,7 +43,7 @@ export async function getDefaultUserId() {
   const user = await prisma.user.upsert({
     where: { email },
     update: { name },
-    create: { email, name },
+    create: { email, name, timezone: DEFAULT_TIMEZONE },
   });
 
   await seedDefaultCategories(user.id);
@@ -56,4 +57,14 @@ export async function getCurrentUser() {
   return prisma.user.findUnique({
     where: { email: session.email },
   });
+}
+
+export async function getDefaultUser() {
+  const userId = await getDefaultUserId();
+  return prisma.user.findUniqueOrThrow({ where: { id: userId } });
+}
+
+export async function getUserTimezone(): Promise<string> {
+  const user = await getDefaultUser();
+  return user.timezone || DEFAULT_TIMEZONE;
 }

@@ -1,3 +1,4 @@
+import { addDays, addMonths } from "date-fns";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
 import {
@@ -6,10 +7,20 @@ import {
   mapBudget,
   mapCreditCard,
   mapReminder,
+  mapRecurringTransaction,
   mapSavingsGoal,
   mapTransaction,
 } from "@/lib/mappers";
-import { getDefaultUserId } from "@/lib/user";
+import { getDefaultUserId, getUserTimezone } from "@/lib/user";
+import {
+  getCurrentLocalMonth,
+  getLocalYmd,
+  localMidnightToUtc,
+  monthRangeUtc,
+  previousLocalMonth,
+  toUserLocalTime,
+} from "@/domain/billing/timezone";
+import { formatUserMonthYear } from "@/utils/dates";
 import {
   calculatePaymentToAvoidInterest,
   type CreditCardPurchase,
@@ -22,19 +33,9 @@ import type {
   StatCardData,
 } from "@/types";
 
-function monthRange(year: number, month: number) {
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 0, 23, 59, 59, 999);
-  return { start, end };
-}
-
-function previousMonth(year: number, month: number) {
-  if (month === 1) return { year: year - 1, month: 12 };
-  return { year, month: month - 1 };
-}
-
 async function enrichCreditCardsWithPayments(
-  cards: Awaited<ReturnType<typeof prisma.creditCard.findMany>>
+  cards: Awaited<ReturnType<typeof prisma.creditCard.findMany>>,
+  timezone: string
 ): Promise<CreditCardData[]> {
   if (cards.length === 0) return [];
 
@@ -71,13 +72,15 @@ async function enrichCreditCardsWithPayments(
   return cards.map((card) => {
     const mapped = mapCreditCard(card);
     const cardPurchases = purchasesByCard.get(card.id) ?? [];
+    const referenceLocal = toUserLocalTime(new Date(), timezone);
     const payment = calculatePaymentToAvoidInterest(
       {
         cutOffDate: card.cutOffDate,
         paymentDueDate: card.paymentDueDate,
         interestRate: toNumber(card.interestRate),
       },
-      cardPurchases
+      cardPurchases,
+      referenceLocal
     );
 
     return {
@@ -109,11 +112,12 @@ export async function getCategories(type?: "INCOME" | "EXPENSE") {
 
 export async function getCreditCards() {
   const userId = await getDefaultUserId();
+  const timezone = await getUserTimezone();
   const cards = await prisma.creditCard.findMany({
     where: { userId, isActive: true },
     orderBy: { createdAt: "asc" },
   });
-  return enrichCreditCardsWithPayments(cards);
+  return enrichCreditCardsWithPayments(cards, timezone);
 }
 
 export async function getTransactions() {
@@ -128,9 +132,10 @@ export async function getTransactions() {
 
 export async function getBudgets(month?: number, year?: number) {
   const userId = await getDefaultUserId();
-  const now = new Date();
-  const targetMonth = month ?? now.getMonth() + 1;
-  const targetYear = year ?? now.getFullYear();
+  const timezone = await getUserTimezone();
+  const current = getCurrentLocalMonth(timezone);
+  const targetMonth = month ?? current.month;
+  const targetYear = year ?? current.year;
 
   const budgets = await prisma.budget.findMany({
     where: { userId, month: targetMonth, year: targetYear },
@@ -138,7 +143,7 @@ export async function getBudgets(month?: number, year?: number) {
     orderBy: { createdAt: "asc" },
   });
 
-  const { start, end } = monthRange(targetYear, targetMonth);
+  const { start, end } = monthRangeUtc(targetYear, targetMonth, timezone);
 
   const results = await Promise.all(
     budgets.map(async (budget) => {
@@ -237,12 +242,32 @@ export async function getSearchData() {
 
 export async function getDashboardData() {
   const userId = await getDefaultUserId();
+  const timezone = await getUserTimezone();
   const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const { start, end } = monthRange(year, month);
-  const prev = previousMonth(year, month);
-  const prevRange = monthRange(prev.year, prev.month);
+  const { year, month } = getCurrentLocalMonth(timezone, now);
+  const { start, end } = monthRangeUtc(year, month, timezone);
+  const prev = previousLocalMonth(year, month);
+  const prevRange = monthRangeUtc(prev.year, prev.month, timezone);
+
+  const todayLocal = getLocalYmd(now, timezone);
+  const weekStartDate = addDays(
+    new Date(todayLocal.year, todayLocal.month, todayLocal.day),
+    -6
+  );
+  const evolutionStartLocal = addMonths(new Date(year, month - 1, 1), -5);
+  const evolutionStart = monthRangeUtc(
+    evolutionStartLocal.getFullYear(),
+    evolutionStartLocal.getMonth() + 1,
+    timezone
+  ).start;
+  const weekQueryStart = localMidnightToUtc(
+    {
+      year: weekStartDate.getFullYear(),
+      month: weekStartDate.getMonth(),
+      day: weekStartDate.getDate(),
+    },
+    timezone
+  );
 
   const [
     accounts,
@@ -284,7 +309,7 @@ export async function getDashboardData() {
       where: {
         userId,
         date: {
-          gte: new Date(year, now.getMonth() - 5, 1),
+          gte: evolutionStart,
           lte: end,
         },
       },
@@ -294,7 +319,7 @@ export async function getDashboardData() {
       where: {
         userId,
         date: {
-          gte: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6),
+          gte: weekQueryStart,
           lte: end,
         },
       },
@@ -392,12 +417,13 @@ export async function getDashboardData() {
   const monthlyEvolution: MonthlyDataPoint[] = [];
 
   for (let i = 5; i >= 0; i--) {
-    const d = new Date(year, now.getMonth() - i, 1);
-    const m = d.getMonth();
+    const d = addMonths(new Date(year, month - 1, 1), -i);
     const y = d.getFullYear();
-    const txInMonth = monthlyTx.filter(
-      (tx) => tx.date.getMonth() === m && tx.date.getFullYear() === y
-    );
+    const m = d.getMonth();
+    const txInMonth = monthlyTx.filter((tx) => {
+      const local = getLocalYmd(tx.date, timezone);
+      return local.year === y && local.month === m;
+    });
     const inc = txInMonth
       .filter((tx) => tx.type === "INCOME")
       .reduce((sum, tx) => sum + toNumber(tx.amount), 0);
@@ -414,13 +440,17 @@ export async function getDashboardData() {
 
   const dayNames = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
   const cashFlowData = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (6 - index));
-    const dayTx = weekTx.filter(
-      (tx) =>
-        tx.date.getFullYear() === date.getFullYear() &&
-        tx.date.getMonth() === date.getMonth() &&
-        tx.date.getDate() === date.getDate()
+    const date = addDays(
+      new Date(todayLocal.year, todayLocal.month, todayLocal.day),
+      index - 6
     );
+    const y = date.getFullYear();
+    const m = date.getMonth();
+    const d = date.getDate();
+    const dayTx = weekTx.filter((tx) => {
+      const local = getLocalYmd(tx.date, timezone);
+      return local.year === y && local.month === m && local.day === d;
+    });
     const inflow = dayTx
       .filter((tx) => tx.type === "INCOME")
       .reduce((sum, tx) => sum + toNumber(tx.amount), 0);
@@ -434,7 +464,7 @@ export async function getDashboardData() {
     };
   });
 
-  const monthLabel = now.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+  const monthLabel = formatUserMonthYear(now, timezone);
 
   const fabAccounts = await prisma.account.findMany({
     where: { userId, isActive: true },
@@ -442,7 +472,7 @@ export async function getDashboardData() {
     select: { id: true, name: true },
   });
 
-  const enrichedCards = await enrichCreditCardsWithPayments(cards);
+  const enrichedCards = await enrichCreditCardsWithPayments(cards, timezone);
 
   return {
     stats,
@@ -452,6 +482,7 @@ export async function getDashboardData() {
     budgets,
     creditCards: enrichedCards,
     monthLabel,
+    timezone,
     fabAccounts,
     fabCategories: categories.map(({ id, name, type }) => ({ id, name, type })),
   };
@@ -466,12 +497,32 @@ export async function getReportsData() {
 }
 
 export async function getCalendarData() {
-  const userId = await getDefaultUserId();
+  const timezone = await getUserTimezone();
   const [reminders, cards, budgets] = await Promise.all([
     getReminders(),
     getCreditCards(),
     getBudgets(),
   ]);
 
-  return { reminders, cards, budgets, userId };
+  return { reminders, cards, budgets, timezone };
+}
+
+export async function getRecurringTransactions() {
+  const userId = await getDefaultUserId();
+  const items = await prisma.recurringTransaction.findMany({
+    where: { userId },
+    include: { category: true, account: true, creditCard: true },
+    orderBy: [{ isActive: "desc" }, { nextRunAt: "asc" }],
+  });
+  return items.map(mapRecurringTransaction);
+}
+
+export async function getRecurringPageData() {
+  const [recurring, accounts, categories, creditCards] = await Promise.all([
+    getRecurringTransactions(),
+    getAccounts(),
+    getCategories(),
+    getCreditCards(),
+  ]);
+  return { recurring, accounts, categories, creditCards };
 }

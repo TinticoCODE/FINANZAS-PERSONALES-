@@ -32,6 +32,8 @@ import {
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { receivableStatusLabels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
+import { formatUserDate, todayIsoInTimezone } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import type { AccountReceivableData } from "@/types";
 
 type AccountOption = { id: string; name: string };
@@ -51,6 +53,8 @@ export function ReceivableList({
   onPaymentRegistered,
   deleting,
 }: ReceivableListProps) {
+  const timezone = useUserTimezone();
+  const todayIso = todayIsoInTimezone(timezone);
   const [pending, startTransition] = useTransition();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<AccountReceivableData | null>(
@@ -119,11 +123,7 @@ export function ReceivableList({
                         <CardTitle className="text-lg">{loan.debtorName}</CardTitle>
                         <CardDescription>
                           Prestado el{" "}
-                          {new Date(loan.loanDate).toLocaleDateString("es-CO", {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })}
+                          {formatUserDate(loan.loanDate, "d MMMM yyyy", timezone)}
                         </CardDescription>
                       </div>
                     </div>
@@ -190,9 +190,7 @@ export function ReceivableList({
                           className="flex justify-between gap-2"
                         >
                           <span>
-                            {new Date(payment.paymentDate).toLocaleDateString(
-                              "es-CO"
-                            )}{" "}
+                            {formatUserDate(payment.paymentDate, "d MMM yyyy", timezone)}{" "}
                             → {payment.destinationAccount}
                           </span>
                           <span className="font-medium text-emerald-600">
@@ -293,7 +291,7 @@ export function ReceivableList({
                   id="payment-date"
                   name="paymentDate"
                   type="date"
-                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  defaultValue={todayIso}
                   required
                 />
               </div>

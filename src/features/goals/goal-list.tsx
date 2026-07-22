@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/card";
 import { AnimatedCounter } from "@/components/shared/animated-counter";
 import { formatCurrency, formatPercent } from "@/lib/format";
+import { formatUserDate } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import type { SavingsGoalData } from "@/types";
 
 type GoalListProps = {
@@ -23,6 +25,8 @@ type GoalListProps = {
 };
 
 export function GoalList({ goals, onDelete, onAddSavings, deleting }: GoalListProps) {
+  const timezone = useUserTimezone();
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {goals.map((goal, index) => {
@@ -50,12 +54,7 @@ export function GoalList({ goals, onDelete, onAddSavings, deleting }: GoalListPr
                     <CardTitle className="text-base">{goal.name}</CardTitle>
                     {goal.targetDate && (
                       <CardDescription>
-                        Meta:{" "}
-                        {new Date(goal.targetDate).toLocaleDateString("es-CO", {
-                          day: "numeric",
-                          month: "long",
-                          year: "numeric",
-                        })}
+                        Meta: {formatUserDate(goal.targetDate, "d MMMM yyyy", timezone)}
                       </CardDescription>
                     )}
                   </div>

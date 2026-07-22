@@ -12,6 +12,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { BudgetData, CreditCardData, ReminderData } from "@/types";
+import { formatUserDate, formatUserMonthYear, utcToUserLocal } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 
 type FinancialCalendarProps = {
   reminders: ReminderData[];
@@ -20,12 +22,13 @@ type FinancialCalendarProps = {
 };
 
 export function FinancialCalendar({ reminders, cards, budgets }: FinancialCalendarProps) {
-  const now = new Date();
-  const monthLabel = now.toLocaleDateString("es-CO", { month: "long", year: "numeric" });
+  const timezone = useUserTimezone();
+  const now = utcToUserLocal(new Date(), timezone);
+  const monthLabel = formatUserMonthYear(new Date(), timezone);
 
   const events = [
     ...reminders.map((r) => ({
-      date: new Date(r.dueDate),
+      date: utcToUserLocal(r.dueDate, timezone),
       title: r.title,
       type: r.type,
     })),
@@ -93,10 +96,7 @@ export function FinancialCalendar({ reminders, cards, budgets }: FinancialCalend
                   <div>
                     <p className="text-sm font-medium">{event.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {event.date.toLocaleDateString("es-CO", {
-                        day: "numeric",
-                        month: "short",
-                      })}
+                      {formatUserDate(event.date, "d MMM", timezone)}
                     </p>
                   </div>
                   <Badge variant="outline">{event.type}</Badge>

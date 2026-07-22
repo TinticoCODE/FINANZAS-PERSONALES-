@@ -10,6 +10,7 @@ import type {
   CreditCard,
   InventoryItem,
   ReceivablePayment,
+  RecurringTransaction,
   Reminder,
   SaleInstallment,
   SavingsGoal,
@@ -20,6 +21,7 @@ import {
   accountTypeIcons,
   accountTypeLabels,
   paymentMethodLabels,
+  recurrenceFrequencyLabels,
 } from "@/lib/labels";
 import type {
   AccountData,
@@ -37,6 +39,7 @@ import type {
   SaleInstallmentData,
   OverdueInstallmentData,
   PendingInstallmentData,
+  RecurringTransactionData,
 } from "@/types";
 
 type TransactionWithRelations = Transaction & {
@@ -127,6 +130,43 @@ export function mapReminder(reminder: Reminder): ReminderData {
     type: reminder.type,
     dueDate: reminder.dueDate.toISOString(),
     isRead: reminder.isRead,
+  };
+}
+
+type RecurringWithRelations = RecurringTransaction & {
+  category: Category;
+  account: Account | null;
+  creditCard: CreditCard | null;
+};
+
+export function mapRecurringTransaction(
+  item: RecurringWithRelations
+): RecurringTransactionData {
+  const fundSource = item.creditCard
+    ? `Tarjeta · ${item.creditCard.name}`
+    : item.account?.name ?? "Sin origen";
+
+  return {
+    id: item.id,
+    type: item.type,
+    amount: toNumber(item.amount),
+    description: item.description ?? undefined,
+    category: item.category.name,
+    categoryColor: item.category.color,
+    categoryId: item.categoryId,
+    accountId: item.accountId ?? undefined,
+    creditCardId: item.creditCardId ?? undefined,
+    fundSource,
+    paymentMethod: paymentMethodLabels[item.paymentMethod],
+    frequency: recurrenceFrequencyLabels[item.frequency],
+    frequencyRaw: item.frequency,
+    dayOfMonth: item.dayOfMonth ?? undefined,
+    dayOfWeek: item.dayOfWeek ?? undefined,
+    monthOfYear: item.monthOfYear ?? undefined,
+    installments: item.installments,
+    nextRunAt: item.nextRunAt.toISOString(),
+    lastRunAt: item.lastRunAt?.toISOString(),
+    isActive: item.isActive,
   };
 }
 

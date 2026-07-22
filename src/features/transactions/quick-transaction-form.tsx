@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createTransaction } from "@/actions/finance.actions";
+import { todayIsoInTimezone } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,6 +45,8 @@ export function QuickTransactionForm({
   title,
 }: QuickTransactionFormProps) {
   const router = useRouter();
+  const timezone = useUserTimezone();
+  const todayIso = useMemo(() => todayIsoInTimezone(timezone), [timezone]);
   const [pending, startTransition] = useTransition();
   const [accountId, setAccountId] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -165,7 +169,7 @@ export function QuickTransactionForm({
               id="qt-date"
               name="date"
               type="date"
-              defaultValue={new Date().toISOString().slice(0, 10)}
+              defaultValue={todayIso}
               required
             />
           </div>

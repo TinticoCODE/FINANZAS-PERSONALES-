@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { createBudget, deleteBudget } from "@/actions/finance.actions";
+import { getLocalMonthYear } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,10 +38,11 @@ type BudgetsViewProps = {
 
 export function BudgetsView({ budgets, categories }: BudgetsViewProps) {
   const router = useRouter();
+  const timezone = useUserTimezone();
+  const { year, month } = getLocalMonthYear(timezone);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [categoryId, setCategoryId] = useState("");
-  const now = new Date();
 
   const selectedCategoryName =
     categories.find((c) => c.id === categoryId)?.name ?? "";
@@ -57,8 +60,8 @@ export function BudgetsView({ budgets, categories }: BudgetsViewProps) {
       await createBudget({
         categoryId,
         amount: Number(formData.get("amount")),
-        month: now.getMonth() + 1,
-        year: now.getFullYear(),
+        month,
+        year,
       });
       setOpen(false);
       setCategoryId("");

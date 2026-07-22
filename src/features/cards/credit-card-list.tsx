@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/card";
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { utcToUserLocal } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import type { CreditCardData } from "@/types";
 
 type CreditCardListProps = {
@@ -22,8 +24,8 @@ type CreditCardListProps = {
   deleting?: boolean;
 };
 
-function getDaysUntil(dayOfMonth: number): number {
-  const today = new Date();
+function getDaysUntil(dayOfMonth: number, timezone: string): number {
+  const today = utcToUserLocal(new Date(), timezone);
   const currentDay = today.getDate();
   if (currentDay <= dayOfMonth) {
     return dayOfMonth - currentDay;
@@ -33,13 +35,14 @@ function getDaysUntil(dayOfMonth: number): number {
 }
 
 export function CreditCardList({ cards, onDelete, deleting }: CreditCardListProps) {
+  const timezone = useUserTimezone();
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {cards.map((card, index) => {
         const utilization = card.creditLimit > 0 ? (card.usedBalance / card.creditLimit) * 100 : 0;
         const available = card.creditLimit - card.usedBalance;
-        const daysToCutoff = getDaysUntil(card.cutOffDate);
-        const daysToPayment = getDaysUntil(card.paymentDueDate);
+        const daysToCutoff = getDaysUntil(card.cutOffDate, timezone);
+        const daysToPayment = getDaysUntil(card.paymentDueDate, timezone);
         const recommendedPayment = card.paymentToAvoidInterest ?? card.usedBalance * 0.3;
         const minPayment = card.minPayment ?? card.usedBalance * 0.05;
         const isHighUtilization = utilization > 70;

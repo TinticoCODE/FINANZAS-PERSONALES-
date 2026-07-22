@@ -80,6 +80,29 @@ export type ReminderData = {
   isRead: boolean;
 };
 
+export type RecurringTransactionData = {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  description?: string;
+  category: string;
+  categoryColor: string;
+  categoryId: string;
+  accountId?: string;
+  creditCardId?: string;
+  fundSource: string;
+  paymentMethod: string;
+  frequency: string;
+  frequencyRaw: string;
+  dayOfMonth?: number;
+  dayOfWeek?: number;
+  monthOfYear?: number;
+  installments: number;
+  nextRunAt: string;
+  lastRunAt?: string;
+  isActive: boolean;
+};
+
 export type ReceivablePaymentData = {
   id: string;
   amount: number;

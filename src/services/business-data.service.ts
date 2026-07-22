@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
-import { getDefaultUserId } from "@/lib/user";
+import { getDefaultUserId, getUserTimezone } from "@/lib/user";
+import { getCurrentLocalMonth, monthRangeUtc } from "@/domain/billing/timezone";
 import { getBusinessCashFlow } from "@/domain/business/cash-flow.service";
 import { getProfitability } from "@/domain/business/profitability.service";
 import { syncOverdueInstallments } from "@/domain/business/installment.service";
@@ -18,12 +19,6 @@ import type {
   BusinessListItem,
   BusinessKpiData,
 } from "@/types";
-
-function monthRange(year: number, month: number) {
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 0, 23, 59, 59, 999);
-  return { start, end };
-}
 
 export async function getBusinessesList(): Promise<BusinessListItem[]> {
   const userId = await getDefaultUserId();
@@ -86,8 +81,9 @@ export async function getBusinessDashboard(
 
   await syncOverdueInstallments(business.id);
 
-  const now = new Date();
-  const { start, end } = monthRange(now.getFullYear(), now.getMonth() + 1);
+  const timezone = await getUserTimezone();
+  const { year, month } = getCurrentLocalMonth(timezone);
+  const { start, end } = monthRangeUtc(year, month, timezone);
 
   const [cashFlow, profitability, ownerCapital, overdueInstallments, pendingInstallments, accounts] =
     await Promise.all([

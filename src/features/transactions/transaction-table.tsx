@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { formatUserDate } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import type { Transaction } from "@/types";
 
 type TransactionTableProps = {
@@ -28,6 +30,8 @@ type TransactionTableProps = {
 };
 
 export function TransactionTable({ data, onDelete, deleting }: TransactionTableProps) {
+  const timezone = useUserTimezone();
+
   if (data.length === 0) return null;
 
   return (
@@ -51,10 +55,7 @@ export function TransactionTable({ data, onDelete, deleting }: TransactionTableP
               className="border-border/40 transition-colors hover:bg-muted/30"
             >
               <TableCell className="text-muted-foreground">
-                {new Date(tx.date).toLocaleDateString("es-CO", {
-                  day: "2-digit",
-                  month: "short",
-                })}
+                {formatUserDate(tx.date, "dd MMM", timezone)}
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">

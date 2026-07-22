@@ -32,6 +32,8 @@ import {
 } from "@/lib/labels";
 import { formatCurrency } from "@/lib/format";
 import { previewCreditPurchase } from "@/services/credit-card.service";
+import { todayIsoInTimezone } from "@/utils/dates";
+import { useUserTimezone } from "@/contexts/user-timezone-context";
 import type { Transaction } from "@/types";
 
 type Option = { id: string; name: string; type?: string };
@@ -61,6 +63,8 @@ export function TransactionsView({
   creditCards,
 }: TransactionsViewProps) {
   const router = useRouter();
+  const timezone = useUserTimezone();
+  const todayIso = useMemo(() => todayIsoInTimezone(timezone), [timezone]);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState(initialFormState);
@@ -366,7 +370,7 @@ export function TransactionsView({
                           id="date"
                           name="date"
                           type="date"
-                          defaultValue={new Date().toISOString().slice(0, 10)}
+                          defaultValue={todayIso}
                           required
                         />
                       </div>
@@ -404,7 +408,7 @@ export function TransactionsView({
                       id="date"
                       name="date"
                       type="date"
-                      defaultValue={new Date().toISOString().slice(0, 10)}
+                      defaultValue={todayIso}
                       required
                     />
                   </div>
