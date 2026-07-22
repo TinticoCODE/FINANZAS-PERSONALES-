@@ -31,7 +31,7 @@ import { ReceivableList } from "@/features/loans/receivable-list";
 import { formatCurrency } from "@/lib/format";
 import type { AccountReceivableData, LoansSummaryData } from "@/types";
 
-type AccountOption = { id: string; name: string; balance: number };
+type AccountOption = { id: string; name: string };
 
 type LoansViewProps = {
   loans: AccountReceivableData[];
@@ -62,16 +62,8 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const principalAmount = Number(formData.get("principalAmount"));
-    const account = accounts.find((a) => a.id === sourceAccountId);
-
-    if (!account) {
+    if (!sourceAccountId) {
       setError("Selecciona la cuenta de origen del dinero");
-      return;
-    }
-    if (principalAmount > account.balance) {
-      setError(
-        `Saldo insuficiente en ${account.name}. Disponible: ${formatCurrency(account.balance)}`
-      );
       return;
     }
 
@@ -213,10 +205,10 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
                     <SelectTrigger id="loan-source-account" className="w-full">
                       <span className="flex-1 truncate text-left">
                         {selectedAccount ? (
-                          `${selectedAccount.name} · ${formatCurrency(selectedAccount.balance)}`
+                          selectedAccount.name
                         ) : (
                           <span className="text-muted-foreground">
-                            ¿De dónde salió el dinero?
+                            ¿Desde qué cuenta salió el dinero?
                           </span>
                         )}
                       </span>
@@ -224,16 +216,15 @@ export function LoansView({ loans, summary, accounts }: LoansViewProps) {
                     <SelectContent className="z-[200]">
                       {accounts.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
-                          {a.name} · {formatCurrency(a.balance)} disponible
+                          {a.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <p className="rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
-                  Partida doble: se restará el monto de la cuenta seleccionada y
-                  quedará registrado como activo en cuentas por cobrar. No se
-                  contabiliza como gasto.
+                  Queda registrado como activo en cuentas por cobrar. No es un
+                  gasto y no afecta tus ingresos del mes.
                 </p>
                 <div className="space-y-2">
                   <Label htmlFor="notes">Notas (opcional)</Label>

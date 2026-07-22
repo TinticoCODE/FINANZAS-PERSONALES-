@@ -34,7 +34,7 @@ import { receivableStatusLabels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import type { AccountReceivableData } from "@/types";
 
-type AccountOption = { id: string; name: string; balance?: number };
+type AccountOption = { id: string; name: string };
 
 type ReceivableListProps = {
   loans: AccountReceivableData[];
