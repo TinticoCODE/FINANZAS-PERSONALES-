@@ -47,6 +47,8 @@ model User {
   savingsGoals          SavingsGoal[]
   reminders             Reminder[]
   accountReceivables    AccountReceivable[]
+  businesses            Business[]
+  capitalTransfers      CapitalTransfer[]
 }
 
 enum ReceivableStatus {
@@ -73,6 +75,7 @@ model Account {
   transactions         Transaction[]
   receivablesDisbursed AccountReceivable[] @relation("DisbursementAccount")
   receivablePayments   ReceivablePayment[] @relation("CollectionAccount")
+  capitalTransfers     CapitalTransfer[]
 
   @@index([userId])
 }
@@ -241,4 +244,343 @@ model ReceivablePayment {
 
   @@index([receivableId])
   @@index([destinationAccountId])
+}
+
+// ─── Business Ledger (aislado del ledger personal) ─────────────────────────
+
+enum BusinessType {
+  RETAIL
+  MANUFACTURING
+  SERVICE
+}
+
+enum BusinessStatus {
+  ACTIVE
+  PAUSED
+  CLOSED
+}
+
+enum CapitalTransferType {
+  OWNER_INVESTMENT
+  OWNER_WITHDRAWAL
+}
+
+enum LedgerAccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum InstallmentStatus {
+  PENDING
+  CURRENT
+  OVERDUE
+  PAID
+  PARTIAL
+  CANCELLED
+}
+
+enum CustomerRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  BLOCKED
+}
+
+enum SalePaymentTerms {
+  CASH
+  CREDIT_INSTALLMENTS
+  MIXED
+}
+
+enum InventoryMovementType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  RETURN
+}
+
+model Business {
+  id           String         @id @default(cuid())
+  userId       String
+  name         String
+  slug         String
+  businessType BusinessType   @default(RETAIL)
+  status       BusinessStatus @default(ACTIVE)
+  currency     String         @default("COP")
+  description  String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledgerAccounts     BusinessLedgerAccount[]
+  capitalTransfers   CapitalTransfer[]
+  customers          BusinessCustomer[]
+  products           BusinessProduct[]
+  inventoryItems     InventoryItem[]
+  sales              BusinessSale[]
+  expenses           BusinessExpense[]
+  expenseCategories  BusinessExpenseCategory[]
+  journalEntries     BusinessJournalEntry[]
+
+  @@unique([userId, slug])
+  @@index([userId, status])
+}
+
+model BusinessLedgerAccount {
+  id         String            @id @default(cuid())
+  businessId String
+  code       String
+  name       String
+  type       LedgerAccountType
+  isSystem   Boolean           @default(false)
+  createdAt  DateTime          @default(now())
+
+  business Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lines    BusinessJournalLine[]
+
+  @@unique([businessId, code])
+  @@index([businessId, type])
+}
+
+model CapitalTransfer {
+  id                String              @id @default(cuid())
+  businessId        String
+  userId            String
+  type              CapitalTransferType
+  amount            Decimal             @db.Decimal(12, 2)
+  transferDate      DateTime
+  personalAccountId String
+  journalEntryId    String              @unique
+  notes             String?
+  createdAt         DateTime            @default(now())
+
+  business        Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personalAccount Account              @relation(fields: [personalAccountId], references: [id])
+  journalEntry    BusinessJournalEntry @relation(fields: [journalEntryId], references: [id])
+
+  @@index([businessId, transferDate])
+  @@index([personalAccountId])
+}
+
+model BusinessCustomer {
+  id               String            @id @default(cuid())
+  businessId       String
+  name             String
+  documentId       String?
+  phone            String?
+  email            String?
+  address          String?
+  riskLevel        CustomerRiskLevel @default(LOW)
+  overdueDaysMax   Int               @default(0)
+  totalSales       Decimal           @default(0) @db.Decimal(12, 2)
+  totalOutstanding Decimal           @default(0) @db.Decimal(12, 2)
+  notes            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  business Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sales    BusinessSale[]
+
+  @@index([businessId, riskLevel])
+  @@index([businessId, name])
+}
+
+model BusinessProduct {
+  id                 String   @id @default(cuid())
+  businessId         String
+  sku                String?
+  name               String
+  description        String?
+  unit               String   @default("und")
+  salePrice          Decimal  @db.Decimal(12, 2)
+  isInventoryTracked Boolean  @default(true)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  business       Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  inventoryItems InventoryItem[]
+  saleLines      BusinessSaleLine[]
+
+  @@index([businessId, isActive])
+}
+
+model InventoryItem {
+  id            String   @id @default(cuid())
+  businessId    String
+  productId     String
+  quantity      Decimal  @db.Decimal(12, 3)
+  unitCost      Decimal  @db.Decimal(12, 2)
+  lastRestocked DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  business  Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  product   BusinessProduct     @relation(fields: [productId], references: [id])
+  movements InventoryMovement[]
+
+  @@unique([businessId, productId])
+  @@index([businessId])
+}
+
+model InventoryMovement {
+  id              String                @id @default(cuid())
+  inventoryItemId String
+  type            InventoryMovementType
+  quantity        Decimal               @db.Decimal(12, 3)
+  unitCost        Decimal               @db.Decimal(12, 2)
+  referenceType   String?
+  referenceId     String?
+  notes           String?
+  movementDate    DateTime              @default(now())
+
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryItemId, movementDate])
+}
+
+model BusinessSale {
+  id             String           @id @default(cuid())
+  businessId     String
+  customerId     String?
+  saleNumber     String
+  saleDate       DateTime
+  paymentTerms   SalePaymentTerms
+  subtotal       Decimal          @db.Decimal(12, 2)
+  discount       Decimal          @default(0) @db.Decimal(12, 2)
+  totalAmount    Decimal          @db.Decimal(12, 2)
+  cashReceived   Decimal          @default(0) @db.Decimal(12, 2)
+  cogsTotal      Decimal          @default(0) @db.Decimal(12, 2)
+  journalEntryId String           @unique
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  business     Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  customer     BusinessCustomer?    @relation(fields: [customerId], references: [id])
+  journalEntry BusinessJournalEntry @relation(fields: [journalEntryId], references: [id])
+  lines        BusinessSaleLine[]
+  installments SaleInstallment[]
+
+  @@unique([businessId, saleNumber])
+  @@index([businessId, saleDate])
+  @@index([customerId])
+}
+
+model BusinessSaleLine {
+  id          String  @id @default(cuid())
+  saleId      String
+  productId   String?
+  description String
+  quantity    Decimal @db.Decimal(12, 3)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  unitCost    Decimal @default(0) @db.Decimal(12, 2)
+  lineTotal   Decimal @db.Decimal(12, 2)
+
+  sale    BusinessSale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product BusinessProduct? @relation(fields: [productId], references: [id])
+
+  @@index([saleId])
+}
+
+model SaleInstallment {
+  id              String            @id @default(cuid())
+  saleId          String
+  installmentNo   Int
+  dueDate         DateTime
+  expectedAmount  Decimal           @db.Decimal(12, 2)
+  paidAmount      Decimal           @default(0) @db.Decimal(12, 2)
+  status          InstallmentStatus @default(PENDING)
+  overdueDays     Int               @default(0)
+  paidAt          DateTime?
+  lastPaymentDate DateTime?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  sale     BusinessSale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  payments InstallmentPayment[]
+
+  @@unique([saleId, installmentNo])
+  @@index([dueDate, status])
+  @@index([status])
+}
+
+model InstallmentPayment {
+  id             String   @id @default(cuid())
+  installmentId  String
+  amount         Decimal  @db.Decimal(12, 2)
+  paymentDate    DateTime
+  journalEntryId String   @unique
+  notes          String?
+
+  installment  SaleInstallment      @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  journalEntry BusinessJournalEntry @relation(fields: [journalEntryId], references: [id])
+
+  @@index([installmentId])
+}
+
+model BusinessExpenseCategory {
+  id         String @id @default(cuid())
+  businessId String
+  name       String
+  color      String @default("#6366f1")
+
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  expenses BusinessExpense[]
+
+  @@unique([businessId, name])
+}
+
+model BusinessExpense {
+  id             String   @id @default(cuid())
+  businessId     String
+  categoryId     String
+  amount         Decimal  @db.Decimal(12, 2)
+  expenseDate    DateTime
+  description    String?
+  journalEntryId String   @unique
+  createdAt      DateTime @default(now())
+
+  business     Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category     BusinessExpenseCategory @relation(fields: [categoryId], references: [id])
+  journalEntry BusinessJournalEntry    @relation(fields: [journalEntryId], references: [id])
+
+  @@index([businessId, expenseDate])
+}
+
+model BusinessJournalEntry {
+  id          String   @id @default(cuid())
+  businessId  String
+  entryDate   DateTime
+  description String
+  reference   String?
+  createdAt   DateTime @default(now())
+
+  business        Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  lines           BusinessJournalLine[]
+  sale            BusinessSale?
+  expense         BusinessExpense?
+  capitalTransfer CapitalTransfer?
+  installmentPay  InstallmentPayment?
+
+  @@index([businessId, entryDate])
+}
+
+model BusinessJournalLine {
+  id              String  @id @default(cuid())
+  journalEntryId  String
+  ledgerAccountId String
+  debit           Decimal @default(0) @db.Decimal(12, 2)
+  credit          Decimal @default(0) @db.Decimal(12, 2)
+
+  journalEntry  BusinessJournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  ledgerAccount BusinessLedgerAccount @relation(fields: [ledgerAccountId], references: [id])
+
+  @@index([journalEntryId])
+  @@index([ledgerAccountId])
 }

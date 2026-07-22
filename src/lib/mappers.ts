@@ -2,10 +2,16 @@ import type {
   Account,
   AccountReceivable,
   Budget,
+  Business,
+  BusinessCustomer,
+  BusinessProduct,
+  BusinessSale,
   Category,
   CreditCard,
+  InventoryItem,
   ReceivablePayment,
   Reminder,
+  SaleInstallment,
   SavingsGoal,
   Transaction,
 } from "@prisma/client";
@@ -24,6 +30,12 @@ import type {
   Transaction as TransactionUI,
   AccountReceivableData,
   ReceivablePaymentData,
+  BusinessData,
+  BusinessProductData,
+  BusinessCustomerData,
+  BusinessSaleData,
+  SaleInstallmentData,
+  OverdueInstallmentData,
 } from "@/types";
 
 type TransactionWithRelations = Transaction & {
@@ -157,5 +169,94 @@ export function mapAccountReceivable(
     collectedAmount: collected,
     progressPercent,
     payments: receivable.payments.map(mapReceivablePayment),
+  };
+}
+
+export function mapBusiness(business: Business): BusinessData {
+  return {
+    id: business.id,
+    name: business.name,
+    slug: business.slug,
+    businessType: business.businessType,
+    status: business.status,
+    currency: business.currency,
+    description: business.description ?? undefined,
+  };
+}
+
+type ProductWithInventory = BusinessProduct & {
+  inventoryItems: InventoryItem[];
+};
+
+export function mapBusinessProduct(product: ProductWithInventory): BusinessProductData {
+  const item = product.inventoryItems[0];
+  const stock = item ? toNumber(item.quantity) : 0;
+  const unitCost = item ? toNumber(item.unitCost) : 0;
+  return {
+    id: product.id,
+    name: product.name,
+    sku: product.sku ?? undefined,
+    salePrice: toNumber(product.salePrice),
+    unit: product.unit,
+    stock,
+    unitCost,
+    inventoryValue: stock * unitCost,
+    isInventoryTracked: product.isInventoryTracked,
+  };
+}
+
+export function mapBusinessCustomer(customer: BusinessCustomer): BusinessCustomerData {
+  return {
+    id: customer.id,
+    name: customer.name,
+    documentId: customer.documentId ?? undefined,
+    phone: customer.phone ?? undefined,
+    riskLevel: customer.riskLevel,
+    totalOutstanding: toNumber(customer.totalOutstanding),
+    overdueDaysMax: customer.overdueDaysMax,
+  };
+}
+
+function mapSaleInstallment(inst: SaleInstallment): SaleInstallmentData {
+  return {
+    id: inst.id,
+    installmentNo: inst.installmentNo,
+    dueDate: inst.dueDate.toISOString(),
+    expectedAmount: toNumber(inst.expectedAmount),
+    paidAmount: toNumber(inst.paidAmount),
+    status: inst.status,
+    overdueDays: inst.overdueDays,
+  };
+}
+
+type SaleWithRelations = BusinessSale & {
+  customer: BusinessCustomer | null;
+  installments: SaleInstallment[];
+};
+
+export function mapBusinessSale(sale: SaleWithRelations): BusinessSaleData {
+  return {
+    id: sale.id,
+    saleNumber: sale.saleNumber,
+    saleDate: sale.saleDate.toISOString(),
+    customerName: sale.customer?.name,
+    totalAmount: toNumber(sale.totalAmount),
+    cashReceived: toNumber(sale.cashReceived),
+    paymentTerms: sale.paymentTerms,
+    installments: sale.installments.map(mapSaleInstallment),
+  };
+}
+
+type OverdueWithRelations = SaleInstallment & {
+  sale: BusinessSale & { customer: BusinessCustomer | null };
+};
+
+export function mapOverdueInstallment(
+  inst: OverdueWithRelations
+): OverdueInstallmentData {
+  return {
+    ...mapSaleInstallment(inst),
+    saleNumber: inst.sale.saleNumber,
+    customerName: inst.sale.customer?.name,
   };
 }

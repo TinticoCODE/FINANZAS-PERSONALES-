@@ -62,3 +62,31 @@ export const defaultCategoryColors = [
   "#64748b",
   "#ef4444",
 ];
+
+export const businessTypeLabels = {
+  RETAIL: "Retail / Reventa",
+  MANUFACTURING: "Manufactura",
+  SERVICE: "Servicios",
+} as const;
+
+export const customerRiskLabels = {
+  LOW: "Bajo",
+  MEDIUM: "Medio",
+  HIGH: "Alto",
+  BLOCKED: "Bloqueado",
+} as const;
+
+export const installmentStatusLabels = {
+  PENDING: "Pendiente",
+  CURRENT: "Al día",
+  OVERDUE: "En mora",
+  PAID: "Pagada",
+  PARTIAL: "Parcial",
+  CANCELLED: "Cancelada",
+} as const;
+
+export const salePaymentTermsLabels = {
+  CASH: "Contado",
+  CREDIT_INSTALLMENTS: "Crédito",
+  MIXED: "Mixto",
+} as const;

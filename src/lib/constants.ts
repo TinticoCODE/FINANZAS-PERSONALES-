@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  Building2,
   Calendar,
   CreditCard,
   HandCoins,
@@ -25,6 +26,7 @@ export const mainNavItems: NavItem[] = [
   { title: "Presupuestos", href: "/budgets", icon: PiggyBank },
   { title: "Cuentas", href: "/accounts", icon: Wallet },
   { title: "Préstamos", href: "/loans", icon: HandCoins },
+  { title: "Negocios", href: "/business", icon: Building2 },
   { title: "Metas", href: "/goals", icon: Target },
   { title: "Calendario", href: "/calendar", icon: Calendar },
   { title: "Reportes", href: "/reports", icon: FileBarChart },
