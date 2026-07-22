@@ -85,6 +85,7 @@ export function RecurringView({
 
   const filteredCategories = categories.filter((c) => c.type === form.type);
   const isCredit = form.paymentMethod === "CREDIT" && form.type === "EXPENSE";
+  const isCash = form.paymentMethod === "CASH" && form.type === "EXPENSE";
 
   const resetForm = () => {
     setForm({
@@ -136,7 +137,7 @@ export function RecurringView({
       type: form.type,
       amount,
       categoryId: form.categoryId,
-      accountId: isCredit ? undefined : form.accountId || undefined,
+      accountId: isCredit || isCash ? undefined : form.accountId || undefined,
       creditCardId: isCredit ? form.creditCardId : undefined,
       paymentMethod: form.paymentMethod,
       description: description || undefined,
@@ -219,8 +220,8 @@ export function RecurringView({
                         setForm((f) => ({
                           ...f,
                           paymentMethod: (v ?? "DEBIT") as typeof f.paymentMethod,
-                          accountId: "",
-                          creditCardId: "",
+                          accountId: v === "CREDIT" || v === "CASH" ? "" : f.accountId,
+                          creditCardId: v === "CREDIT" ? f.creditCardId : "",
                         }))
                       }
                     >
@@ -286,6 +287,10 @@ export function RecurringView({
                       </SelectContent>
                     </Select>
                   </div>
+                ) : isCash ? (
+                  <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                    Efectivo: no requiere cuenta bancaria.
+                  </p>
                 ) : (
                   <div className="space-y-2">
                     <Label>Cuenta</Label>
@@ -447,7 +452,11 @@ export function RecurringView({
                     disabled={
                       pending ||
                       !form.categoryId ||
-                      (isCredit ? !form.creditCardId : !form.accountId)
+                      (isCredit
+                        ? !form.creditCardId
+                        : isCash
+                          ? false
+                          : !form.accountId)
                     }
                   >
                     {pending ? "Guardando..." : editItem ? "Actualizar" : "Crear"}

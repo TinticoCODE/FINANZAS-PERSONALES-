@@ -49,6 +49,10 @@ async function applyTransactionBalances(
     return;
   }
 
+  if (params.paymentMethod === "CASH") {
+    return;
+  }
+
   if (!params.accountId) throw new Error("Recurring expense requires accountId");
   await tx.account.update({
     where: { id: params.accountId },

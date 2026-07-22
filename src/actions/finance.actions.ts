@@ -60,8 +60,12 @@ async function applyTransactionEffects(params: {
     return;
   }
 
+  if (params.paymentMethod === "CASH") {
+    return;
+  }
+
   if (!params.accountId) {
-    throw new Error("Los gastos con débito o efectivo requieren una cuenta bancaria");
+    throw new Error("Los gastos con débito o transferencia requieren una cuenta bancaria");
   }
 
   await prisma.account.update({
@@ -93,9 +97,16 @@ function validateTransactionFunding(data: {
     return;
   }
 
+  if (data.paymentMethod === "CASH") {
+    if (hasCard) {
+      throw new Error("Un gasto en efectivo no puede asociarse a una tarjeta");
+    }
+    return;
+  }
+
   if (!hasAccount) throw new Error("Selecciona la cuenta bancaria del gasto");
   if (hasCard) {
-    throw new Error("Un gasto con débito o efectivo no puede asociarse a una tarjeta");
+    throw new Error("Un gasto con débito o transferencia no puede asociarse a una tarjeta");
   }
 }
 

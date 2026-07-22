@@ -72,6 +72,8 @@ export function TransactionsView({
   const filteredCategories = categories.filter((c) => c.type === form.type);
   const isCreditPurchase =
     form.paymentMethod === "CREDIT" && form.type === "EXPENSE";
+  const isCashExpense =
+    form.paymentMethod === "CASH" && form.type === "EXPENSE";
 
   const resetForm = () => setForm(initialFormState);
 
@@ -86,7 +88,8 @@ export function TransactionsView({
 
     startTransition(async () => {
       await createTransaction({
-        accountId: isCreditPurchase ? undefined : form.accountId || undefined,
+        accountId:
+          isCreditPurchase || isCashExpense ? undefined : form.accountId || undefined,
         categoryId: form.categoryId,
         creditCardId: isCreditPurchase ? form.creditCardId : undefined,
         type: form.type,
@@ -109,7 +112,7 @@ export function TransactionsView({
     setForm((prev) => ({
       ...prev,
       paymentMethod: method,
-      accountId: method === "CREDIT" ? "" : prev.accountId,
+      accountId: method === "CREDIT" || method === "CASH" ? "" : prev.accountId,
       creditCardId: method === "CREDIT" ? prev.creditCardId : "",
       installments: "1",
       amount: method === "CREDIT" ? prev.amount : "",
@@ -129,8 +132,9 @@ export function TransactionsView({
     }));
   };
 
-  const canCreateTransaction = accounts.length > 0 || creditCards.length > 0;
-  const requiresAccount = form.type === "INCOME" || !isCreditPurchase;
+  const canCreateTransaction = true;
+  const requiresAccount =
+    form.type === "INCOME" || (!isCreditPurchase && !isCashExpense);
   const canSubmit =
     Boolean(form.categoryId) &&
     (isCreditPurchase
@@ -281,7 +285,7 @@ export function TransactionsView({
                   </div>
                 )}
 
-                {!isCreditPurchase && (
+                {!isCreditPurchase && !isCashExpense && (
                   <div className="space-y-2">
                     <Label>Cuenta bancaria</Label>
                     <Select
@@ -310,6 +314,13 @@ export function TransactionsView({
                       </p>
                     )}
                   </div>
+                )}
+
+                {isCashExpense && (
+                  <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                    Pago en efectivo: no se asocia a ninguna cuenta bancaria ni modifica
+                    saldos.
+                  </p>
                 )}
 
                 {isCreditPurchase && (
