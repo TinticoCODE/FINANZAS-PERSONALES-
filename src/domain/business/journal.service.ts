@@ -33,10 +33,22 @@ export async function getLedgerBalance(
     include: { lines: { select: { debit: true, credit: true } } },
   });
   if (!account) return 0;
-  return account.lines.reduce(
+
+  const netDebit = account.lines.reduce(
     (sum, line) => sum + toNumber(line.debit) - toNumber(line.credit),
     0
   );
+
+  // Pasivo, patrimonio e ingresos tienen saldo normal acreedor (crédito − débito)
+  if (
+    account.type === "LIABILITY" ||
+    account.type === "EQUITY" ||
+    account.type === "REVENUE"
+  ) {
+    return -netDebit;
+  }
+
+  return netDebit;
 }
 
 function validateBalanced(lines: JournalLineInput[]) {

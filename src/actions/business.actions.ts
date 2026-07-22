@@ -8,7 +8,7 @@ import {
   getChartOfAccounts,
   slugifyBusinessName,
 } from "@/domain/business/chart-of-accounts";
-import { postJournalEntry } from "@/domain/business/journal.service";
+import { postJournalEntry, getLedgerBalance } from "@/domain/business/journal.service";
 import {
   createBusinessSale,
   registerInstallmentPayment,
@@ -324,12 +324,23 @@ export async function recordCapitalTransfer(data: {
 
   if (data.amount <= 0) throw new Error("El monto debe ser mayor a cero");
 
+  const transferDate = parseTransferDate(data.transferDate);
+
   await prisma.$transaction(async (tx) => {
     const isInvestment = data.type === "OWNER_INVESTMENT";
 
+    if (!isInvestment) {
+      const cashOnHand = await getLedgerBalance(tx, data.businessId, "1100");
+      if (data.amount > cashOnHand + 0.01) {
+        throw new Error(
+          `Saldo insuficiente en caja del negocio (${cashOnHand.toLocaleString("es-CO")} COP disponible)`
+        );
+      }
+    }
+
     const entry = await postJournalEntry(tx, {
       businessId: data.businessId,
-      entryDate: new Date(data.transferDate),
+      entryDate: transferDate,
       description: isInvestment
         ? "Inversión del dueño"
         : "Retiro de utilidades",
@@ -350,7 +361,7 @@ export async function recordCapitalTransfer(data: {
         userId,
         type: data.type,
         amount: data.amount,
-        transferDate: new Date(data.transferDate),
+        transferDate,
         personalAccountId: data.personalAccountId,
         journalEntryId: entry.id,
         notes: data.notes,
@@ -368,6 +379,13 @@ export async function recordCapitalTransfer(data: {
   });
 
   revalidateBusiness(business.slug);
+}
+
+function parseTransferDate(value: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T12:00:00`);
+  }
+  return new Date(value);
 }
 
 export async function createBusinessExpenseAction(data: {
