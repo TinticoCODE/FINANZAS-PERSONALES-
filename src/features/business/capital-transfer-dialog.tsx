@@ -20,9 +20,13 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+
+const transferTypeLabels = {
+  OWNER_INVESTMENT: "Inversión (personal → negocio)",
+  OWNER_WITHDRAWAL: "Retiro de utilidades (negocio → personal)",
+} as const;
 
 type CapitalTransferDialogProps = {
   businessId: string;
@@ -39,6 +43,9 @@ export function CapitalTransferDialog({
   const [type, setType] = useState("OWNER_INVESTMENT");
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
+
+  const selectedAccountName =
+    accounts.find((a) => a.id === accountId)?.name ?? "Selecciona la cuenta";
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -83,12 +90,12 @@ export function CapitalTransferDialog({
           </Button>
         }
       />
-      <DialogContent className="z-[100]">
+      <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Transferencia de capital</DialogTitle>
           </DialogHeader>
-          <div className="relative z-[100] space-y-4 py-4">
+          <div className="space-y-4 py-4">
             {accounts.length === 0 && (
               <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
                 Crea una cuenta personal en Cuentas antes de transferir capital.
@@ -97,19 +104,20 @@ export function CapitalTransferDialog({
             <div className="space-y-2">
               <Label htmlFor="transfer-type">Tipo</Label>
               <Select
-                name="transfer-type"
                 value={type}
                 onValueChange={(v) => v && setType(v)}
               >
                 <SelectTrigger id="transfer-type" className="w-full">
-                  <SelectValue placeholder="Selecciona el tipo" />
+                  <span className="flex-1 truncate text-left">
+                    {transferTypeLabels[type as keyof typeof transferTypeLabels]}
+                  </span>
                 </SelectTrigger>
                 <SelectContent className="z-[200]">
-                  <SelectItem value="OWNER_INVESTMENT" label="Inversión (personal → negocio)">
-                    Inversión (personal → negocio)
+                  <SelectItem value="OWNER_INVESTMENT">
+                    {transferTypeLabels.OWNER_INVESTMENT}
                   </SelectItem>
-                  <SelectItem value="OWNER_WITHDRAWAL" label="Retiro de utilidades (negocio → personal)">
-                    Retiro de utilidades (negocio → personal)
+                  <SelectItem value="OWNER_WITHDRAWAL">
+                    {transferTypeLabels.OWNER_WITHDRAWAL}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -117,16 +125,17 @@ export function CapitalTransferDialog({
             <div className="space-y-2">
               <Label htmlFor="personal-account">Cuenta personal</Label>
               <Select
-                name="personal-account"
                 value={accountId}
                 onValueChange={(v) => v && setAccountId(v)}
               >
                 <SelectTrigger id="personal-account" className="w-full">
-                  <SelectValue placeholder="Selecciona la cuenta" />
+                  <span className="flex-1 truncate text-left">
+                    {selectedAccountName}
+                  </span>
                 </SelectTrigger>
                 <SelectContent className="z-[200]">
                   {accounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id} label={a.name}>
+                    <SelectItem key={a.id} value={a.id}>
                       {a.name}
                     </SelectItem>
                   ))}

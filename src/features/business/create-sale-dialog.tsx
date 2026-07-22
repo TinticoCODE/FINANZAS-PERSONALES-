@@ -23,7 +23,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/format";
 import type { BusinessCustomerData, BusinessProductData } from "@/types";
@@ -56,6 +55,7 @@ export function CreateSaleDialog({
   const [newCustomerName, setNewCustomerName] = useState("");
 
   const product = products.find((p) => p.id === productId);
+  const selectedCustomer = customers.find((c) => c.id === customerId);
   const qty = Number(quantity) || 0;
   const total = product ? product.salePrice * qty : 0;
   const down = Number(cashDown) || 0;
@@ -138,11 +138,11 @@ export function CreateSaleDialog({
           </Button>
         }
       />
-      <DialogContent className="z-[100] max-w-lg">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Registrar venta</DialogTitle>
         </DialogHeader>
-        <div className="relative z-[100] space-y-4 py-2">
+        <div className="space-y-4 py-2">
           {products.length === 0 ? (
             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
               Primero crea un producto en la pestaña Inventario.
@@ -155,15 +155,19 @@ export function CreateSaleDialog({
                 onValueChange={(v) => v && setProductId(v)}
               >
                 <SelectTrigger id="sale-product" className="w-full">
-                  <SelectValue placeholder="Selecciona un producto" />
+                  <span className="flex-1 truncate text-left">
+                    {product ? (
+                      productLabel(product)
+                    ) : (
+                      <span className="text-muted-foreground">
+                        Selecciona un producto
+                      </span>
+                    )}
+                  </span>
                 </SelectTrigger>
                 <SelectContent className="z-[200]">
                   {products.map((p) => (
-                    <SelectItem
-                      key={p.id}
-                      value={p.id}
-                      label={productLabel(p)}
-                    >
+                    <SelectItem key={p.id} value={p.id}>
                       {productLabel(p)}
                     </SelectItem>
                   ))}
@@ -200,11 +204,19 @@ export function CreateSaleDialog({
               onValueChange={(v) => setCustomerId(v ?? "")}
             >
               <SelectTrigger id="sale-customer" className="w-full">
-                <SelectValue placeholder="Opcional — o crea uno abajo" />
+                <span className="flex-1 truncate text-left">
+                  {selectedCustomer ? (
+                    selectedCustomer.name
+                  ) : (
+                    <span className="text-muted-foreground">
+                      Opcional — o crea uno abajo
+                    </span>
+                  )}
+                </span>
               </SelectTrigger>
               <SelectContent className="z-[200]">
                 {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id} label={c.name}>
+                  <SelectItem key={c.id} value={c.id}>
                     {c.name}
                   </SelectItem>
                 ))}
