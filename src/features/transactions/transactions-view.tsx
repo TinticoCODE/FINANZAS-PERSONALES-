@@ -82,9 +82,9 @@ export function TransactionsView({
 
     startTransition(async () => {
       await createTransaction({
-        accountId: form.accountId,
+        accountId: isCreditPurchase ? undefined : form.accountId || undefined,
         categoryId: form.categoryId,
-        creditCardId: form.creditCardId || undefined,
+        creditCardId: isCreditPurchase ? form.creditCardId : undefined,
         type: form.type,
         amount: Number(formData.get("amount")),
         description: (formData.get("description") as string) || undefined,
@@ -98,6 +98,42 @@ export function TransactionsView({
       router.refresh();
     });
   };
+
+  const handlePaymentMethodChange = (
+    method: keyof typeof paymentMethodLabels
+  ) => {
+    setForm((prev) => ({
+      ...prev,
+      paymentMethod: method,
+      accountId: method === "CREDIT" ? "" : prev.accountId,
+      creditCardId: method === "CREDIT" ? prev.creditCardId : "",
+      installments: "1",
+      amount: method === "CREDIT" ? prev.amount : "",
+    }));
+  };
+
+  const handleTypeChange = (type: "INCOME" | "EXPENSE") => {
+    setForm((prev) => ({
+      ...prev,
+      type,
+      categoryId: "",
+      paymentMethod: "DEBIT",
+      accountId: prev.accountId,
+      creditCardId: "",
+      installments: "1",
+      amount: "",
+    }));
+  };
+
+  const canCreateTransaction = accounts.length > 0 || creditCards.length > 0;
+  const requiresAccount = form.type === "INCOME" || !isCreditPurchase;
+  const canSubmit =
+    Boolean(form.categoryId) &&
+    (isCreditPurchase
+      ? Boolean(form.creditCardId)
+      : requiresAccount
+        ? Boolean(form.accountId)
+        : true);
 
   const handleDelete = (id: string) => {
     startTransition(async () => {
@@ -132,7 +168,7 @@ export function TransactionsView({
         description="Administra todas tus entradas y salidas de dinero"
         action={
           <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogTrigger render={<Button size="sm" className="gap-2" disabled={accounts.length === 0} />}>
+            <DialogTrigger render={<Button size="sm" className="gap-2" disabled={!canCreateTransaction} />}>
               <Plus className="h-4 w-4" />
               Nueva transacción
             </DialogTrigger>
@@ -148,11 +184,7 @@ export function TransactionsView({
                       value={form.type}
                       onValueChange={(v) => {
                         if (!v) return;
-                        setForm((prev) => ({
-                          ...prev,
-                          type: v as "INCOME" | "EXPENSE",
-                          categoryId: "",
-                        }));
+                        handleTypeChange(v as "INCOME" | "EXPENSE");
                       }}
                     >
                       <SelectTrigger className="w-full">
@@ -192,66 +224,40 @@ export function TransactionsView({
                   <Label htmlFor="description">Descripción</Label>
                   <Textarea id="description" name="description" rows={2} />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Categoría</Label>
-                    <Select
-                      value={form.categoryId}
-                      onValueChange={(v) =>
-                        setForm((prev) => ({ ...prev, categoryId: v ?? "" }))
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Seleccionar categoría">
-                          {selectedCategoryName}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {filteredCategories.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Cuenta</Label>
-                    <Select
-                      value={form.accountId}
-                      onValueChange={(v) =>
-                        setForm((prev) => ({ ...prev, accountId: v ?? "" }))
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Seleccionar cuenta">
-                          {selectedAccountName}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {accounts.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>
-                            {a.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Categoría</Label>
+                  <Select
+                    value={form.categoryId}
+                    onValueChange={(v) =>
+                      setForm((prev) => ({ ...prev, categoryId: v ?? "" }))
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Seleccionar categoría">
+                        {selectedCategoryName}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredCategories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+
                 {form.type === "EXPENSE" && (
                   <div className="space-y-2">
                     <Label>Método de pago</Label>
                     <Select
                       value={form.paymentMethod}
-                      onValueChange={(v) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          paymentMethod: (v ?? "DEBIT") as keyof typeof paymentMethodLabels,
-                          creditCardId: v === "CREDIT" ? prev.creditCardId : "",
-                          installments: "1",
-                          amount: "",
-                        }))
-                      }
+                      onValueChange={(v) => {
+                        if (!v) return;
+                        handlePaymentMethodChange(
+                          v as keyof typeof paymentMethodLabels
+                        );
+                      }}
                     >
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Seleccionar método">
@@ -271,30 +277,70 @@ export function TransactionsView({
                   </div>
                 )}
 
+                {!isCreditPurchase && (
+                  <div className="space-y-2">
+                    <Label>Cuenta bancaria</Label>
+                    <Select
+                      value={form.accountId}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({ ...prev, accountId: v ?? "" }))
+                      }
+                      disabled={accounts.length === 0}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar cuenta">
+                          {selectedAccountName}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {accounts.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Crea una cuenta bancaria para registrar este movimiento.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {isCreditPurchase && (
+                  <div className="space-y-2">
+                    <Label>Tarjeta de crédito asociada</Label>
+                    <Select
+                      value={form.creditCardId}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({ ...prev, creditCardId: v ?? "" }))
+                      }
+                      disabled={creditCards.length === 0}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar tarjeta">
+                          {selectedCardName}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {creditCards.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {creditCards.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Registra una tarjeta de crédito antes de continuar.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {isCreditPurchase && creditCards.length > 0 && (
                   <>
-                    <div className="space-y-2">
-                      <Label>Tarjeta de crédito</Label>
-                      <Select
-                        value={form.creditCardId}
-                        onValueChange={(v) =>
-                          setForm((prev) => ({ ...prev, creditCardId: v ?? "" }))
-                        }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Seleccionar tarjeta">
-                            {selectedCardName}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {creditCards.map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="installments">Número de cuotas</Label>
@@ -365,15 +411,7 @@ export function TransactionsView({
                 )}
 
                 <DialogFooter>
-                  <Button
-                    type="submit"
-                    disabled={
-                      pending ||
-                      !form.accountId ||
-                      !form.categoryId ||
-                      (isCreditPurchase && !form.creditCardId)
-                    }
-                  >
+                  <Button type="submit" disabled={pending || !canSubmit}>
                     {pending ? "Guardando..." : "Guardar"}
                   </Button>
                 </DialogFooter>
@@ -383,10 +421,10 @@ export function TransactionsView({
         }
       />
 
-      {accounts.length === 0 ? (
+      {accounts.length === 0 && creditCards.length === 0 ? (
         <EmptyState
-          title="Crea una cuenta primero"
-          description="Necesitas al menos una cuenta para registrar transacciones."
+          title="Crea una cuenta o tarjeta primero"
+          description="Necesitas al menos una cuenta bancaria o tarjeta de crédito para registrar transacciones."
           actionLabel="Ir a cuentas"
           onAction={() => router.push("/accounts")}
         />

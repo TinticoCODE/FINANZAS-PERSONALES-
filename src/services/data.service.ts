@@ -118,7 +118,7 @@ export async function getTransactions() {
   const userId = await getDefaultUserId();
   const transactions = await prisma.transaction.findMany({
     where: { userId },
-    include: { category: true, account: true },
+    include: { category: true, account: true, creditCard: true },
     orderBy: { date: "desc" },
   });
   return transactions.map(mapTransaction);

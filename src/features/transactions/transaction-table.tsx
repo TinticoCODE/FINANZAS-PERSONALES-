@@ -38,7 +38,7 @@ export function TransactionTable({ data, onDelete, deleting }: TransactionTableP
             <TableHead>Fecha</TableHead>
             <TableHead>Descripción</TableHead>
             <TableHead>Categoría</TableHead>
-            <TableHead>Cuenta</TableHead>
+            <TableHead>Origen</TableHead>
             <TableHead>Método</TableHead>
             <TableHead className="text-right">Monto</TableHead>
             <TableHead className="w-10" />
@@ -94,7 +94,7 @@ export function TransactionTable({ data, onDelete, deleting }: TransactionTableP
                   {tx.category}
                 </Badge>
               </TableCell>
-              <TableCell className="text-muted-foreground">{tx.account}</TableCell>
+              <TableCell className="text-muted-foreground">{tx.fundSource}</TableCell>
               <TableCell className="text-muted-foreground">{tx.paymentMethod}</TableCell>
               <TableCell
                 className={cn(

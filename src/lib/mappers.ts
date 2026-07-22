@@ -24,10 +24,15 @@ import type {
 
 type TransactionWithRelations = Transaction & {
   category: Category;
-  account: Account;
+  account: Account | null;
+  creditCard: CreditCard | null;
 };
 
 export function mapTransaction(tx: TransactionWithRelations): TransactionUI {
+  const fundSource = tx.creditCard
+    ? `Tarjeta · ${tx.creditCard.name}`
+    : tx.account?.name ?? "Sin origen";
+
   return {
     id: tx.id,
     date: tx.date.toISOString(),
@@ -35,12 +40,13 @@ export function mapTransaction(tx: TransactionWithRelations): TransactionUI {
     type: tx.type,
     category: tx.category.name,
     categoryColor: tx.category.color,
-    account: tx.account.name,
+    account: tx.account?.name ?? "—",
     paymentMethod: paymentMethodLabels[tx.paymentMethod],
     description: tx.description ?? "",
     tags: tx.tags,
     installments: tx.installments,
     creditCardId: tx.creditCardId ?? undefined,
+    fundSource,
   };
 }
 

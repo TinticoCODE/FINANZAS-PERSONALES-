@@ -23,6 +23,7 @@ export type Transaction = {
   tags: string[];
   installments?: number;
   creditCardId?: string;
+  fundSource: string;
 };
 
 export type CreditCardData = {

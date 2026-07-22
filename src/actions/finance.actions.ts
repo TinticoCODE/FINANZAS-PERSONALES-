@@ -23,7 +23,7 @@ function revalidateAll() {
 }
 
 async function applyTransactionEffects(params: {
-  accountId: string;
+  accountId?: string | null;
   creditCardId?: string | null;
   type: TransactionType;
   amount: number;
@@ -34,6 +34,9 @@ async function applyTransactionEffects(params: {
   const amount = params.amount * multiplier;
 
   if (params.type === "INCOME") {
+    if (!params.accountId) {
+      throw new Error("Los ingresos deben estar asociados a una cuenta bancaria");
+    }
     await prisma.account.update({
       where: { id: params.accountId },
       data: { balance: { increment: amount } },
@@ -49,10 +52,43 @@ async function applyTransactionEffects(params: {
     return;
   }
 
+  if (!params.accountId) {
+    throw new Error("Los gastos con débito o efectivo requieren una cuenta bancaria");
+  }
+
   await prisma.account.update({
     where: { id: params.accountId },
     data: { balance: { decrement: amount } },
   });
+}
+
+function validateTransactionFunding(data: {
+  type: TransactionType;
+  paymentMethod: PaymentMethod;
+  accountId?: string;
+  creditCardId?: string;
+}) {
+  const hasAccount = Boolean(data.accountId);
+  const hasCard = Boolean(data.creditCardId);
+
+  if (data.type === "INCOME") {
+    if (!hasAccount) throw new Error("Selecciona la cuenta donde ingresa el dinero");
+    if (hasCard) throw new Error("Los ingresos no pueden asociarse a una tarjeta de crédito");
+    return;
+  }
+
+  if (data.paymentMethod === "CREDIT") {
+    if (!hasCard) throw new Error("Selecciona la tarjeta de crédito usada en la compra");
+    if (hasAccount) {
+      throw new Error("Un gasto a crédito no puede restar saldo de una cuenta bancaria");
+    }
+    return;
+  }
+
+  if (!hasAccount) throw new Error("Selecciona la cuenta bancaria del gasto");
+  if (hasCard) {
+    throw new Error("Un gasto con débito o efectivo no puede asociarse a una tarjeta");
+  }
 }
 
 export async function createAccount(data: {
@@ -119,7 +155,7 @@ export async function deleteCreditCard(id: string) {
 }
 
 export async function createTransaction(data: {
-  accountId: string;
+  accountId?: string;
   categoryId: string;
   creditCardId?: string;
   type: TransactionType;
@@ -133,6 +169,13 @@ export async function createTransaction(data: {
   const userId = await getDefaultUserId();
   const installments = Math.max(1, data.installments ?? 1);
 
+  validateTransactionFunding({
+    type: data.type,
+    paymentMethod: data.paymentMethod,
+    accountId: data.accountId,
+    creditCardId: data.creditCardId,
+  });
+
   if (data.paymentMethod === "CREDIT" && data.creditCardId) {
     if (installments < 1 || installments > 48) {
       throw new Error("El número de cuotas debe estar entre 1 y 48");
@@ -143,7 +186,7 @@ export async function createTransaction(data: {
     await tx.transaction.create({
       data: {
         userId,
-        accountId: data.accountId,
+        accountId: data.accountId || null,
         categoryId: data.categoryId,
         creditCardId: data.creditCardId || null,
         type: data.type,
@@ -183,21 +226,13 @@ export async function createCreditCardTransaction(data: {
     throw new Error("El número de cuotas debe estar entre 1 y 48");
   }
 
-  const [card, defaultAccount] = await Promise.all([
-    prisma.creditCard.findFirst({
-      where: { id: data.creditCardId, userId, isActive: true },
-    }),
-    prisma.account.findFirst({
-      where: { userId, isActive: true },
-      orderBy: { createdAt: "asc" },
-    }),
-  ]);
+  const card = await prisma.creditCard.findFirst({
+    where: { id: data.creditCardId, userId, isActive: true },
+  });
 
   if (!card) throw new Error("Tarjeta de crédito no encontrada");
-  if (!defaultAccount) throw new Error("Necesitas al menos una cuenta activa");
 
   await createTransaction({
-    accountId: defaultAccount.id,
     categoryId: data.categoryId,
     creditCardId: data.creditCardId,
     type: "EXPENSE",
