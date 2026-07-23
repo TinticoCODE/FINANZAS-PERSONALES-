@@ -26,7 +26,10 @@ import {
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/page-header";
 import { BudgetList } from "@/features/budgets/budget-list";
+import { BudgetSummary } from "@/features/budgets/budget-summary";
+import { getBudgetMonthContext } from "@/features/budgets/budget-analytics";
 import { EmptyState } from "@/components/shared/empty-state";
+import { formatUserMonthYear } from "@/utils/dates";
 import type { BudgetData } from "@/types";
 
 type Option = { id: string; name: string };
@@ -40,6 +43,8 @@ export function BudgetsView({ budgets, categories }: BudgetsViewProps) {
   const router = useRouter();
   const timezone = useUserTimezone();
   const { year, month } = getLocalMonthYear(timezone);
+  const monthContext = getBudgetMonthContext(timezone);
+  const monthLabel = formatUserMonthYear(new Date(), timezone);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [categoryId, setCategoryId] = useState("");
@@ -135,7 +140,19 @@ export function BudgetsView({ budgets, categories }: BudgetsViewProps) {
           onAction={() => setOpen(true)}
         />
       ) : (
-        <BudgetList budgets={budgets} onDelete={handleDelete} deleting={pending} />
+        <div className="space-y-6">
+          <BudgetSummary
+            budgets={budgets}
+            monthContext={monthContext}
+            monthLabel={monthLabel}
+          />
+          <BudgetList
+            budgets={budgets}
+            monthContext={monthContext}
+            onDelete={handleDelete}
+            deleting={pending}
+          />
+        </div>
       )}
     </div>
   );
