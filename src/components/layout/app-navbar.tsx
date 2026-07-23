@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Bell, Menu, Moon, Search, Sun, User } from "lucide-react";
+import { Bell, Menu, Moon, Sun, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -12,30 +12,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { GlobalSearch } from "@/features/search/global-search";
+import { TransactionCommandMenu } from "@/features/search/transaction-command-menu";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { Badge } from "@/components/ui/badge";
 import { LogoutMenuItem } from "@/features/auth/logout-menu-item";
 import { formatUserDate, formatUserRelative } from "@/utils/dates";
 import { useUserTimezone } from "@/contexts/user-timezone-context";
-import type { ReminderData, Transaction, CreditCardData, AccountData, BudgetData } from "@/types";
-
-type SearchData = {
-  transactions: Transaction[];
-  creditCards: CreditCardData[];
-  accounts: AccountData[];
-  budgets: BudgetData[];
-  incomeCategories: string[];
-  expenseCategories: string[];
-};
+import type { ReminderData } from "@/types";
 
 type AppNavbarProps = {
   reminders: ReminderData[];
-  searchData: SearchData;
   userName?: string;
 };
 
-export function AppNavbar({ reminders, searchData, userName = "Admin" }: AppNavbarProps) {
+export function AppNavbar({ reminders, userName = "Admin" }: AppNavbarProps) {
   const { theme, setTheme } = useTheme();
   const { setMobileOpen } = useSidebar();
   const timezone = useUserTimezone();
@@ -53,7 +43,7 @@ export function AppNavbar({ reminders, searchData, userName = "Admin" }: AppNavb
       </Button>
 
       <div className="flex flex-1 items-center gap-4">
-        <GlobalSearch {...searchData} />
+        <TransactionCommandMenu />
       </div>
 
       <div className="flex items-center gap-1">
@@ -115,13 +105,14 @@ export function AppNavbar({ reminders, searchData, userName = "Admin" }: AppNavb
               </Button>
             }
           />
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>{userName}</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem disabled>
               <User className="mr-2 h-4 w-4" />
               Perfil
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <LogoutMenuItem />
           </DropdownMenuContent>
         </DropdownMenu>
