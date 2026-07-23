@@ -144,10 +144,10 @@ export type LoanData = {
   payments: LoanPaymentData[];
 };
 
-/** @deprecated Use LoanData */
+/** @deprecated Usar LoanData */
 export type AccountReceivableData = LoanData;
 
-/** @deprecated Use LoanPaymentData */
+/** @deprecated Usar LoanPaymentData */
 export type ReceivablePaymentData = LoanPaymentData;
 
 export type LoansSummaryData = {

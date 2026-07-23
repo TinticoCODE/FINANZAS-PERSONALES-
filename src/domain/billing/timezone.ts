@@ -10,7 +10,7 @@ export type LocalYmd = {
   day: number;
 };
 
-/** Instant UTC → reloj local del usuario (Date con componentes locales). */
+/** Instante UTC → reloj local del usuario (Date con componentes locales). */
 export function toUserLocalTime(instantUtc: Date, timezone: string): Date {
   return toZonedTime(instantUtc, timezone);
 }
@@ -37,7 +37,7 @@ export function getLocalHour(instantUtc: Date, timezone: string): number {
   return toUserLocalTime(instantUtc, timezone).getHours();
 }
 
-/** Mes calendario actual del usuario (month 1–12). */
+/** Mes calendario actual del usuario (mes 1–12). */
 export function getCurrentLocalMonth(
   timezone: string,
   instantUtc: Date = new Date()
@@ -46,7 +46,7 @@ export function getCurrentLocalMonth(
   return { year: local.year, month: local.month + 1 };
 }
 
-/** Rango UTC [inicio, fin] de un mes calendario en la TZ del usuario. month = 1–12. */
+/** Rango UTC [inicio, fin] de un mes calendario en la TZ del usuario. mes = 1–12. */
 export function monthRangeUtc(
   year: number,
   month: number,

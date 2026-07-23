@@ -218,7 +218,7 @@ export function CreditInstallmentFields({
         </div>
       )}
 
-      {/* Hidden field for form submit when MSI select is used */}
+      {/* Campo oculto para el envío del formulario cuando se usa el selector MSI */}
       {hasZeroInterest && (
         <input type="hidden" name="installments" value={parsedInstallments} />
       )}

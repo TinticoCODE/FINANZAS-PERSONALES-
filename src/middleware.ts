@@ -17,7 +17,7 @@ export async function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
-    pathname.includes(".") // static files
+    pathname.includes(".") // archivos estáticos
   ) {
     return NextResponse.next();
   }

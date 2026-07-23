@@ -592,7 +592,7 @@ export async function createLoan(data: {
   return { ok: true };
 }
 
-/** @deprecated Use createLoan */
+/** @deprecated Usar createLoan */
 export const createAccountReceivable = createLoan;
 
 export async function registerLoanPayment(data: {
@@ -691,7 +691,7 @@ export async function registerLoanPayment(data: {
   revalidateLoans();
 }
 
-/** @deprecated Use registerLoanPayment */
+/** @deprecated Usar registerLoanPayment */
 export async function registerReceivablePayment(data: {
   receivableId: string;
   amount: number;
@@ -740,7 +740,7 @@ export async function deleteLoan(id: string) {
   revalidateLoans();
 }
 
-/** @deprecated Use deleteLoan */
+/** @deprecated Usar deleteLoan */
 export const deleteAccountReceivable = deleteLoan;
 
 export async function createRecurringTransaction(data: {

@@ -5,7 +5,7 @@ import {
   type LocalYmd,
 } from "@/domain/billing/timezone";
 
-/** Rango MTD en UTC: día 1 del mes hasta `endDay` (inclusive) en TZ del usuario. month = 1–12. */
+/** Rango MTD en UTC: día 1 del mes hasta `endDay` (inclusivo) en TZ del usuario. mes = 1–12. */
 export function mtdRangeUtc(
   year: number,
   month: number,

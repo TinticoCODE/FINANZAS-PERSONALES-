@@ -25,7 +25,7 @@ export async function getMonthlyHistory(year: number, month?: number) {
   return { ok: true as const, data };
 }
 
-/** Fuerza el cierre de un mes (solo si no existe). Útil para backfill manual. */
+/** Fuerza el cierre de un mes (solo si no existe). Útil para carga retroactiva manual. */
 export async function createMonthlySnapshotAction(year: number, month: number) {
   const userId = await getDefaultUserId();
   const timezone = await getUserTimezone();

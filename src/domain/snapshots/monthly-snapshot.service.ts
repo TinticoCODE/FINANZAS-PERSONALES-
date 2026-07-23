@@ -248,7 +248,7 @@ export async function getYearlyMonthlySnapshots(
   return results;
 }
 
-/** Convierte snapshots anuales al formato de gráfico ingresos vs gastos. */
+/** Convierte cierres mensuales anuales al formato de gráfico ingresos vs gastos. */
 export function snapshotsToMonthlyEvolution(snapshots: MonthlySnapshotDTO[]) {
   return snapshots.map((snapshot) => ({
     month: MONTH_NAMES[snapshot.month - 1] ?? String(snapshot.month),

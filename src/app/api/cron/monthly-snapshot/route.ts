@@ -3,7 +3,7 @@ import { closePreviousMonthForAllUsers } from "@/domain/snapshots/monthly-snapsh
 
 /**
  * Cron diario — persiste el cierre del mes anterior si aún no existe.
- * Schedule: 0 4 * * * (antes del corte de tarjetas).
+ * Programación: 0 4 * * * (antes del corte de tarjetas).
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");

@@ -36,7 +36,7 @@ model User {
   email     String   @unique
   name      String?
   avatarUrl String?
-  /// IANA timezone used for billing cycles, recurring jobs and UI formatting.
+  /// Zona horaria IANA usada para ciclos de facturación, tareas recurrentes y formato en la interfaz.
   timezone  String   @default("America/Bogota")
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -130,7 +130,7 @@ model Transaction {
   hasZeroInterest   Boolean     @default(false)
   tags          String[]        @default([])
   attachmentUrl String?
-  /// Stored as UTC (timestamptz). Business meaning is interpreted in User.timezone.
+  /// Almacenado en UTC (timestamptz). El significado de negocio se interpreta en User.timezone.
   date          DateTime        @default(now()) @db.Timestamptz(3)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
@@ -352,7 +352,7 @@ model MonthlySnapshot {
   @@index([userId, year])
 }
 
-// ─── Business Ledger (aislado del ledger personal) ─────────────────────────
+// ─── Libro mayor comercial (aislado del libro mayor personal) ─────────────
 
 enum BusinessType {
   RETAIL

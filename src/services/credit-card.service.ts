@@ -60,7 +60,7 @@ export function teaToMonthlyRate(teaPercent: number): number {
   return Math.pow(1 + teaPercent / 100, 1 / 12) - 1;
 }
 
-/** Convierte TEA (%) a Tasa Mensual Vencida M.V. (%) para mostrar en UI. */
+/** Convierte TEA (%) a Tasa Mensual Vencida M.V. (%) para mostrar en la interfaz. */
 export function teaToMonthlyPercent(teaPercent: number): number {
   return round2(teaToMonthlyRate(teaPercent) * 100);
 }

@@ -276,12 +276,12 @@ export function mapLoan(loan: LoanWithRelations, timezone = DEFAULT_TIMEZONE): L
   };
 }
 
-/** @deprecated Use mapLoan */
+/** @deprecated Usar mapLoan */
 export function mapAccountReceivable(loan: LoanWithRelations): AccountReceivableData {
   return mapLoan(loan);
 }
 
-/** @deprecated Use mapLoanPayment */
+/** @deprecated Usar mapLoanPayment */
 export function mapReceivablePayment(
   payment: LoanPayment & { destinationAccount: Account }
 ): ReceivablePaymentData {

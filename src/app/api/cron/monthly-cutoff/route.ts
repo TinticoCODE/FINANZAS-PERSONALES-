@@ -5,7 +5,7 @@ import { runMonthlyCutoffForAllUsers } from "@/domain/billing/monthly-cutoff.ser
  * Vercel Cron — evalúa cortes de tarjeta y RecurringTransaction
  * usando la zona horaria de cada usuario (no UTC absoluto del servidor).
  *
- * Schedule recomendado: cada hora (`0 * * * *`) para cubrir medianoche local.
+ * Programación recomendada: cada hora (`0 * * * *`) para cubrir medianoche local.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
