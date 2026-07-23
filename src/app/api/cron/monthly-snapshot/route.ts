@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { closePreviousMonthForAllUsers } from "@/domain/snapshots/monthly-snapshot.service";
+import { disconnectDb } from "@/lib/prisma";
 
 /**
- * Cron diario — persiste el cierre del mes anterior si aún no existe.
- * Programación: 0 4 * * * (antes del corte de tarjetas).
+ * @deprecated Usar /api/cron/daily (cron unificado para ahorrar CU-hours en Neon).
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -13,6 +13,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await closePreviousMonthForAllUsers();
-  return NextResponse.json({ ok: true, ...result });
+  try {
+    const result = await closePreviousMonthForAllUsers();
+    return NextResponse.json({ ok: true, ...result });
+  } finally {
+    await disconnectDb();
+  }
 }

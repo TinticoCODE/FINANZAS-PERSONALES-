@@ -6,6 +6,7 @@ import {
   computeNextRunAt,
   cutoffCycleEndUtc,
   cutoffCycleStartUtc,
+  getLocalHour,
   isCreditCardCutoffProcessingWindow,
   isRecurringDue,
   toUserLocalTime,
@@ -105,75 +106,79 @@ export async function runMonthlyCutoffForUser(
     errors: [] as string[],
   };
 
-  const cards = await prisma.creditCard.findMany({
-    where: { userId, isActive: true },
-  });
+  const shouldProcessCardCutoffs = getLocalHour(instantUtc, timezone) === 0;
 
-  for (const card of cards) {
-    if (!isCreditCardCutoffProcessingWindow(card.cutOffDate, timezone, instantUtc)) {
-      continue;
-    }
-
-    const cycleEnd = cutoffCycleEndUtc(card.cutOffDate, timezone, instantUtc);
-    const cycleStart = cutoffCycleStartUtc(cycleEnd, card.cutOffDate, timezone);
-
-    const existing = await prisma.creditCardStatement.findUnique({
-      where: {
-        creditCardId_cycleEnd: {
-          creditCardId: card.id,
-          cycleEnd,
-        },
-      },
+  if (shouldProcessCardCutoffs) {
+    const cards = await prisma.creditCard.findMany({
+      where: { userId, isActive: true },
     });
-    if (existing) continue;
 
-    try {
-      await prisma.$transaction(async (tx) => {
-        await tx.creditCardStatement.create({
-          data: {
-            userId,
+    for (const card of cards) {
+      if (!isCreditCardCutoffProcessingWindow(card.cutOffDate, timezone, instantUtc)) {
+        continue;
+      }
+
+      const cycleEnd = cutoffCycleEndUtc(card.cutOffDate, timezone, instantUtc);
+      const cycleStart = cutoffCycleStartUtc(cycleEnd, card.cutOffDate, timezone);
+
+      const existing = await prisma.creditCardStatement.findUnique({
+        where: {
+          creditCardId_cycleEnd: {
             creditCardId: card.id,
-            cycleStart,
             cycleEnd,
-            usedBalanceAtClose: card.usedBalance,
           },
-        });
-
-        const cycleEndLocal = toUserLocalTime(cycleEnd, timezone);
-        const paymentDueLocal = getPaymentDueForCycle(
-          cycleEndLocal,
-          card.cutOffDate,
-          card.paymentDueDate
-        );
-
-        await tx.reminder.create({
-          data: {
-            userId,
-            title: `Pago tarjeta ${card.name}`,
-            description: `Corte cerrado. Pago mínimo / evitar intereses antes del ${paymentDueLocal.toLocaleDateString("es-CO")}`,
-            type: "CARD_PAYMENT",
-            dueDate: fromZonedTime(
-              new Date(
-                paymentDueLocal.getFullYear(),
-                paymentDueLocal.getMonth(),
-                paymentDueLocal.getDate(),
-                12,
-                0,
-                0,
-                0
-              ),
-              timezone
-            ),
-          },
-        });
+        },
       });
+      if (existing) continue;
 
-      result.creditCardStatementsClosed += 1;
-      result.remindersCreated += 1;
-    } catch (err) {
-      result.errors.push(
-        `card ${card.id}: ${err instanceof Error ? err.message : "cutoff failed"}`
-      );
+      try {
+        await prisma.$transaction(async (tx) => {
+          await tx.creditCardStatement.create({
+            data: {
+              userId,
+              creditCardId: card.id,
+              cycleStart,
+              cycleEnd,
+              usedBalanceAtClose: card.usedBalance,
+            },
+          });
+
+          const cycleEndLocal = toUserLocalTime(cycleEnd, timezone);
+          const paymentDueLocal = getPaymentDueForCycle(
+            cycleEndLocal,
+            card.cutOffDate,
+            card.paymentDueDate
+          );
+
+          await tx.reminder.create({
+            data: {
+              userId,
+              title: `Pago tarjeta ${card.name}`,
+              description: `Corte cerrado. Pago mínimo / evitar intereses antes del ${paymentDueLocal.toLocaleDateString("es-CO")}`,
+              type: "CARD_PAYMENT",
+              dueDate: fromZonedTime(
+                new Date(
+                  paymentDueLocal.getFullYear(),
+                  paymentDueLocal.getMonth(),
+                  paymentDueLocal.getDate(),
+                  12,
+                  0,
+                  0,
+                  0
+                ),
+                timezone
+              ),
+            },
+          });
+        });
+
+        result.creditCardStatementsClosed += 1;
+        result.remindersCreated += 1;
+      } catch (err) {
+        result.errors.push(
+          `card ${card.id}: ${err instanceof Error ? err.message : "cutoff failed"}`
+        );
+      }
     }
   }
 

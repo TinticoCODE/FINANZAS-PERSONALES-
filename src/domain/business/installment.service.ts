@@ -12,6 +12,13 @@ function computeRiskLevel(
 }
 
 export async function syncOverdueInstallments(businessId?: string) {
+  const businessCount = await prisma.business.count({
+    where: businessId ? { id: businessId } : undefined,
+  });
+  if (businessCount === 0) {
+    return { updated: 0, skipped: true as const };
+  }
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -27,6 +34,10 @@ export async function syncOverdueInstallments(businessId?: string) {
   const overdueInstallments = pending.filter(
     (inst) => toNumber(inst.paidAmount) < toNumber(inst.expectedAmount)
   );
+
+  if (overdueInstallments.length === 0) {
+    return { updated: 0, skipped: true as const };
+  }
 
   for (const inst of overdueInstallments) {
     const paid = toNumber(inst.paidAmount);

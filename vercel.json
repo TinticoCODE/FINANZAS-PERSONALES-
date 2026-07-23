@@ -4,16 +4,8 @@
   "regions": ["iad1"],
   "crons": [
     {
-      "path": "/api/cron/monthly-snapshot",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/monthly-cutoff",
+      "path": "/api/cron/daily",
       "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/overdue-installments",
-      "schedule": "0 6 * * *"
     }
   ]
 }

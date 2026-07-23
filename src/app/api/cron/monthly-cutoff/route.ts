@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import { runMonthlyCutoffForAllUsers } from "@/domain/billing/monthly-cutoff.service";
+import { disconnectDb } from "@/lib/prisma";
 
 /**
- * Vercel Cron — evalúa cortes de tarjeta y RecurringTransaction
- * usando la zona horaria de cada usuario (no UTC absoluto del servidor).
- *
- * Programación recomendada: cada hora (`0 * * * *`) para cubrir medianoche local.
+ * @deprecated Usar /api/cron/daily (cron unificado para ahorrar CU-hours en Neon).
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -15,6 +13,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const result = await runMonthlyCutoffForAllUsers();
-  return NextResponse.json({ ok: true, ...result });
+  try {
+    const result = await runMonthlyCutoffForAllUsers();
+    return NextResponse.json({ ok: true, ...result });
+  } finally {
+    await disconnectDb();
+  }
 }
