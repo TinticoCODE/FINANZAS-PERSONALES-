@@ -657,8 +657,15 @@ export async function deleteLoan(id: string) {
     });
     if (!loan) return;
 
+    const isClosed = loan.status === "PAID";
+
+    if (isClosed) {
+      await tx.loan.delete({ where: { id } });
+      return;
+    }
+
     if (loan._count.payments > 0) {
-      throw new Error("No puedes eliminar un préstamo que ya tiene abonos registrados");
+      throw new Error("No puedes eliminar un préstamo activo que ya tiene abonos registrados");
     }
 
     await tx.account.update({

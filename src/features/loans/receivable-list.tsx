@@ -4,6 +4,17 @@ import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, CalendarClock, HandCoins, Trash2, Wallet } from "lucide-react";
 import { registerLoanPayment } from "@/actions/finance.actions";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -284,16 +295,56 @@ export function ReceivableList({
                         Registrar abono
                       </Button>
                     )}
-                    {onDelete && loan.payments.length === 0 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={deleting}
-                        onClick={() => onDelete(loan.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                    {onDelete &&
+                      (loan.status === "PAID" || loan.payments.length === 0) &&
+                      (loan.status === "PAID" ? (
+                        <AlertDialog>
+                          <AlertDialogTrigger
+                            render={
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={deleting}
+                                aria-label="Eliminar préstamo cerrado"
+                              />
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                ¿Eliminar este préstamo cerrado?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Se borrará el registro de {loan.debtorName} y todo su
+                                historial de abonos. Esta acción no afecta los saldos
+                                de tus cuentas.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={deleting}>
+                                Cancelar
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                disabled={deleting}
+                                onClick={() => onDelete(loan.id)}
+                              >
+                                {deleting ? "Eliminando..." : "Eliminar"}
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={deleting}
+                          onClick={() => onDelete(loan.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ))}
                   </div>
                 </CardContent>
               </Card>
