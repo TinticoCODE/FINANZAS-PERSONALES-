@@ -15,6 +15,13 @@ import {
   computeNextRunAt,
   localMidnightToUtc,
 } from "@/domain/billing/timezone";
+import {
+  allocatePayment,
+  calculateExpectedReturn,
+  computeOutstandingBalance,
+  computeTotalPaid,
+} from "@/domain/loans/loan-calculations";
+import type { InterestType } from "@prisma/client";
 
 function revalidateAll() {
   revalidatePath("/");
@@ -399,16 +406,21 @@ function revalidateLoans() {
   revalidatePath("/");
 }
 
-export async function createAccountReceivable(data: {
+export async function createLoan(data: {
   debtorName: string;
   principalAmount: number;
   sourceAccountId: string;
   loanDate: string;
+  dueDate: string;
   interestRate?: number;
+  interestType?: InterestType;
   notes?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const userId = await getDefaultUserId();
+  const timezone = await getUserTimezone();
   const amount = data.principalAmount;
+  const interestRate = data.interestRate ?? 0;
+  const interestType = data.interestType ?? "FLAT";
 
   if (amount <= 0) {
     return { ok: false, error: "El monto del préstamo debe ser mayor a cero" };
@@ -417,6 +429,25 @@ export async function createAccountReceivable(data: {
   if (!data.debtorName.trim()) {
     return { ok: false, error: "Ingresa el nombre del deudor" };
   }
+
+  if (!data.dueDate) {
+    return { ok: false, error: "Ingresa la fecha de vencimiento" };
+  }
+
+  const loanDate = parseLocalDateToUtc(data.loanDate, timezone);
+  const dueDate = parseLocalDateToUtc(data.dueDate, timezone);
+
+  if (dueDate <= loanDate) {
+    return { ok: false, error: "La fecha de vencimiento debe ser posterior al préstamo" };
+  }
+
+  const expectedReturnAmount = calculateExpectedReturn(
+    amount,
+    interestRate,
+    interestType,
+    loanDate,
+    dueDate
+  );
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -432,14 +463,17 @@ export async function createAccountReceivable(data: {
         data: { balance: { decrement: amount } },
       });
 
-      await tx.accountReceivable.create({
+      await tx.loan.create({
         data: {
           userId,
           debtorName: data.debtorName.trim(),
           principalAmount: amount,
-          outstandingBalance: amount,
-          interestRate: data.interestRate ?? 0,
-          loanDate: parseLocalDateToUtc(data.loanDate, await getUserTimezone()),
+          outstandingBalance: expectedReturnAmount,
+          interestRate,
+          interestType,
+          expectedReturnAmount,
+          loanDate,
+          dueDate,
           sourceAccountId: data.sourceAccountId,
           notes: data.notes,
           status: "ACTIVE",
@@ -450,7 +484,7 @@ export async function createAccountReceivable(data: {
     if (err instanceof Error && err.message === "ACCOUNT_NOT_FOUND") {
       return { ok: false, error: "Cuenta bancaria no encontrada" };
     }
-    console.error("createAccountReceivable failed:", err);
+    console.error("createLoan failed:", err);
     return { ok: false, error: "No se pudo registrar el préstamo" };
   }
 
@@ -458,30 +492,56 @@ export async function createAccountReceivable(data: {
   return { ok: true };
 }
 
-export async function registerReceivablePayment(data: {
-  receivableId: string;
+/** @deprecated Use createLoan */
+export const createAccountReceivable = createLoan;
+
+export async function registerLoanPayment(data: {
+  loanId: string;
   amount: number;
   destinationAccountId: string;
   paymentDate: string;
   notes?: string;
 }) {
   const userId = await getDefaultUserId();
+  const timezone = await getUserTimezone();
   const amount = data.amount;
 
   if (amount <= 0) throw new Error("El abono debe ser mayor a cero");
 
   await prisma.$transaction(async (tx) => {
-    const receivable = await tx.accountReceivable.findFirst({
-      where: { id: data.receivableId, userId },
+    const loan = await tx.loan.findFirst({
+      where: { id: data.loanId, userId },
+      include: { payments: true },
     });
-    if (!receivable) throw new Error("Préstamo no encontrado");
-    if (receivable.status !== "ACTIVE") {
+    if (!loan) throw new Error("Préstamo no encontrado");
+    if (loan.status !== "ACTIVE") {
       throw new Error("Solo se pueden registrar abonos en préstamos activos");
     }
 
-    const outstanding = toNumber(receivable.outstandingBalance);
+    const principalAmount = toNumber(loan.principalAmount);
+    const storedExpectedReturn = toNumber(loan.expectedReturnAmount);
+    const expectedReturnAmount =
+      storedExpectedReturn > 0
+        ? storedExpectedReturn
+        : calculateExpectedReturn(
+            principalAmount,
+            toNumber(loan.interestRate),
+            loan.interestType,
+            loan.loanDate,
+            loan.dueDate
+          );
+
+    const { totalPaid, principalPaid, interestPaid } = computeTotalPaid(
+      loan.payments.map((payment) => ({
+        amount: toNumber(payment.amount),
+        principalPaid: toNumber(payment.principalPaid),
+        interestPaid: toNumber(payment.interestPaid),
+      }))
+    );
+
+    const outstanding = computeOutstandingBalance(expectedReturnAmount, totalPaid);
     if (amount > outstanding) {
-      throw new Error("El abono supera el saldo pendiente del deudor");
+      throw new Error("El abono supera el saldo pendiente (capital + intereses)");
     }
 
     const destination = await tx.account.findFirst({
@@ -489,10 +549,21 @@ export async function registerReceivablePayment(data: {
     });
     if (!destination) throw new Error("Cuenta receptora no encontrada");
 
-    const newOutstanding = outstanding - amount;
+    const allocation = allocatePayment(
+      amount,
+      principalAmount,
+      expectedReturnAmount,
+      principalPaid,
+      interestPaid
+    );
 
-    await tx.accountReceivable.update({
-      where: { id: data.receivableId },
+    const newOutstanding = computeOutstandingBalance(
+      expectedReturnAmount,
+      totalPaid + amount
+    );
+
+    await tx.loan.update({
+      where: { id: data.loanId },
       data: {
         outstandingBalance: newOutstanding,
         status: newOutstanding <= 0 ? "PAID" : "ACTIVE",
@@ -504,11 +575,13 @@ export async function registerReceivablePayment(data: {
       data: { balance: { increment: amount } },
     });
 
-    await tx.receivablePayment.create({
+    await tx.loanPayment.create({
       data: {
-        receivableId: data.receivableId,
+        loanId: data.loanId,
         amount,
-        paymentDate: parseLocalDateToUtc(data.paymentDate, await getUserTimezone()),
+        principalPaid: allocation.principalPaid,
+        interestPaid: allocation.interestPaid,
+        paymentDate: parseLocalDateToUtc(data.paymentDate, timezone),
         destinationAccountId: data.destinationAccountId,
         notes: data.notes,
       },
@@ -518,30 +591,50 @@ export async function registerReceivablePayment(data: {
   revalidateLoans();
 }
 
-export async function deleteAccountReceivable(id: string) {
+/** @deprecated Use registerLoanPayment */
+export async function registerReceivablePayment(data: {
+  receivableId: string;
+  amount: number;
+  destinationAccountId: string;
+  paymentDate: string;
+  notes?: string;
+}) {
+  return registerLoanPayment({
+    loanId: data.receivableId,
+    amount: data.amount,
+    destinationAccountId: data.destinationAccountId,
+    paymentDate: data.paymentDate,
+    notes: data.notes,
+  });
+}
+
+export async function deleteLoan(id: string) {
   const userId = await getDefaultUserId();
 
   await prisma.$transaction(async (tx) => {
-    const receivable = await tx.accountReceivable.findFirst({
+    const loan = await tx.loan.findFirst({
       where: { id, userId },
       include: { _count: { select: { payments: true } } },
     });
-    if (!receivable) return;
+    if (!loan) return;
 
-    if (receivable._count.payments > 0) {
+    if (loan._count.payments > 0) {
       throw new Error("No puedes eliminar un préstamo que ya tiene abonos registrados");
     }
 
     await tx.account.update({
-      where: { id: receivable.sourceAccountId },
-      data: { balance: { increment: toNumber(receivable.outstandingBalance) } },
+      where: { id: loan.sourceAccountId },
+      data: { balance: { increment: toNumber(loan.principalAmount) } },
     });
 
-    await tx.accountReceivable.delete({ where: { id } });
+    await tx.loan.delete({ where: { id } });
   });
 
   revalidateLoans();
 }
+
+/** @deprecated Use deleteLoan */
+export const deleteAccountReceivable = deleteLoan;
 
 export async function createRecurringTransaction(data: {
   type: TransactionType;

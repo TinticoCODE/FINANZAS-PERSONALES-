@@ -23,6 +23,12 @@ export const transactionTypeLabels = {
   EXPENSE: "Gasto",
 } as const;
 
+export const interestTypeLabels = {
+  FLAT: "Fijo (único)",
+  MONTHLY: "Mensual",
+  ANNUAL: "Anual",
+} as const;
+
 export const receivableStatusLabels = {
   ACTIVE: "Activo",
   PAID: "Pagado",

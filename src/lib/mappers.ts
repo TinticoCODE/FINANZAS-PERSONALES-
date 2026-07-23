@@ -1,6 +1,5 @@
 import type {
   Account,
-  AccountReceivable,
   Budget,
   Business,
   BusinessCustomer,
@@ -9,14 +8,26 @@ import type {
   Category,
   CreditCard,
   InventoryItem,
-  ReceivablePayment,
+  Loan,
+  LoanPayment,
   RecurringTransaction,
   Reminder,
   SaleInstallment,
   SavingsGoal,
   Transaction,
 } from "@prisma/client";
+import { addMonths } from "date-fns";
+import {
+  calculateExpectedReturn,
+  computeOutstandingBalance,
+  computeProgressPercent,
+  computeTotalPaid,
+  isLoanOverdue,
+  computeDaysUntilDue,
+} from "@/domain/loans/loan-calculations";
 import { toNumber } from "@/lib/decimal";
+import { todayIsoInTimezone } from "@/utils/dates";
+import { DEFAULT_TIMEZONE } from "@/domain/billing/timezone";
 import {
   accountTypeIcons,
   accountTypeLabels,
@@ -31,6 +42,8 @@ import type {
   SavingsGoalData,
   Transaction as TransactionUI,
   AccountReceivableData,
+  LoanData,
+  LoanPaymentData,
   ReceivablePaymentData,
   BusinessData,
   BusinessProductData,
@@ -174,47 +187,100 @@ export function mapRecurringTransaction(
   };
 }
 
-type ReceivableWithRelations = AccountReceivable & {
+type LoanWithRelations = Loan & {
   sourceAccount: Account;
-  payments: (ReceivablePayment & { destinationAccount: Account })[];
+  payments: (LoanPayment & { destinationAccount: Account })[];
 };
 
-export function mapReceivablePayment(
-  payment: ReceivablePayment & { destinationAccount: Account }
-): ReceivablePaymentData {
+export function mapLoanPayment(
+  payment: LoanPayment & { destinationAccount: Account }
+): LoanPaymentData {
+  const amount = toNumber(payment.amount);
+  const principalPaid = toNumber(payment.principalPaid);
+  const interestPaid = toNumber(payment.interestPaid);
+  const hasBreakdown = principalPaid > 0 || interestPaid > 0;
+
   return {
     id: payment.id,
-    amount: toNumber(payment.amount),
+    amount,
+    principalPaid: hasBreakdown ? principalPaid : amount,
+    interestPaid: hasBreakdown ? interestPaid : 0,
     paymentDate: payment.paymentDate.toISOString(),
     destinationAccount: payment.destinationAccount.name,
     notes: payment.notes ?? undefined,
   };
 }
 
-export function mapAccountReceivable(
-  receivable: ReceivableWithRelations
-): AccountReceivableData {
-  const principal = toNumber(receivable.principalAmount);
-  const outstanding = toNumber(receivable.outstandingBalance);
-  const collected = Math.max(principal - outstanding, 0);
-  const progressPercent =
-    principal > 0 ? Math.min((collected / principal) * 100, 100) : 0;
+export function mapLoan(loan: LoanWithRelations, timezone = DEFAULT_TIMEZONE): LoanData {
+  const principal = toNumber(loan.principalAmount);
+  const interestRate = toNumber(loan.interestRate);
+  const storedExpectedReturn = toNumber(loan.expectedReturnAmount);
+  const isLegacyLoan = storedExpectedReturn === 0;
+  const effectiveDueDate = isLegacyLoan
+    ? addMonths(loan.loanDate, 1)
+    : loan.dueDate <= loan.loanDate
+      ? addMonths(loan.loanDate, 1)
+      : loan.dueDate;
+  const expectedReturnAmount = isLegacyLoan
+    ? principal
+    : storedExpectedReturn > 0
+      ? storedExpectedReturn
+      : calculateExpectedReturn(
+          principal,
+          interestRate,
+          loan.interestType,
+          loan.loanDate,
+          effectiveDueDate
+        );
+
+  const mappedPayments = loan.payments.map(mapLoanPayment);
+  const { totalPaid, principalPaid, interestPaid } = computeTotalPaid(mappedPayments);
+  const outstandingBalance = computeOutstandingBalance(expectedReturnAmount, totalPaid);
+  const progressPercent = computeProgressPercent(expectedReturnAmount, totalPaid);
+  const todayIso = todayIsoInTimezone(timezone);
+  const dueDateIso = effectiveDueDate.toISOString();
+  const isOverdue = isLoanOverdue(loan.status, dueDateIso, todayIso);
+  const daysUntilDue = computeDaysUntilDue(dueDateIso, todayIso);
+  const totalInterest = Math.max(expectedReturnAmount - principal, 0);
 
   return {
-    id: receivable.id,
-    debtorName: receivable.debtorName,
+    id: loan.id,
+    debtorName: loan.debtorName,
     principalAmount: principal,
-    outstandingBalance: outstanding,
-    interestRate: toNumber(receivable.interestRate),
-    loanDate: receivable.loanDate.toISOString(),
-    status: receivable.status,
-    sourceAccount: receivable.sourceAccount?.name ?? "Cuenta eliminada",
-    sourceAccountId: receivable.sourceAccountId,
-    notes: receivable.notes ?? undefined,
-    collectedAmount: collected,
+    outstandingBalance,
+    interestRate,
+    interestType: loan.interestType,
+    expectedReturnAmount,
+    totalInterest,
+    loanDate: loan.loanDate.toISOString(),
+    dueDate: dueDateIso,
+    status:
+      outstandingBalance <= 0 && totalPaid > 0
+        ? "PAID"
+        : loan.status,
+    sourceAccount: loan.sourceAccount?.name ?? "Cuenta eliminada",
+    sourceAccountId: loan.sourceAccountId,
+    notes: loan.notes ?? undefined,
+    collectedAmount: totalPaid,
+    principalCollected: principalPaid,
+    interestCollected: interestPaid,
     progressPercent,
-    payments: receivable.payments.map(mapReceivablePayment),
+    daysUntilDue,
+    isOverdue,
+    payments: mappedPayments,
   };
+}
+
+/** @deprecated Use mapLoan */
+export function mapAccountReceivable(loan: LoanWithRelations): AccountReceivableData {
+  return mapLoan(loan);
+}
+
+/** @deprecated Use mapLoanPayment */
+export function mapReceivablePayment(
+  payment: LoanPayment & { destinationAccount: Account }
+): ReceivablePaymentData {
+  return mapLoanPayment(payment);
 }
 
 export function mapBusiness(business: Business): BusinessData {

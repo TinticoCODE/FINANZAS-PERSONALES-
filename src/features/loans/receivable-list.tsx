@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
-import { HandCoins, Trash2, Wallet } from "lucide-react";
-import { registerReceivablePayment } from "@/actions/finance.actions";
+import { AlertTriangle, CalendarClock, HandCoins, Trash2, Wallet } from "lucide-react";
+import { registerLoanPayment } from "@/actions/finance.actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,16 +30,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import { receivableStatusLabels } from "@/lib/labels";
+import { interestTypeLabels, receivableStatusLabels } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { formatUserDate, todayIsoInTimezone } from "@/utils/dates";
 import { useUserTimezone } from "@/contexts/user-timezone-context";
-import type { AccountReceivableData } from "@/types";
+import type { LoanData } from "@/types";
 
 type AccountOption = { id: string; name: string };
 
 type ReceivableListProps = {
-  loans: AccountReceivableData[];
+  loans: LoanData[];
   accounts: AccountOption[];
   onDelete?: (id: string) => void;
   onPaymentRegistered?: () => void;
@@ -57,15 +57,13 @@ export function ReceivableList({
   const todayIso = todayIsoInTimezone(timezone);
   const [pending, startTransition] = useTransition();
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [selectedLoan, setSelectedLoan] = useState<AccountReceivableData | null>(
-    null
-  );
+  const [selectedLoan, setSelectedLoan] = useState<LoanData | null>(null);
   const [destinationAccountId, setDestinationAccountId] = useState("");
 
   const selectedAccountName =
     accounts.find((a) => a.id === destinationAccountId)?.name ?? "";
 
-  const openPayment = (loan: AccountReceivableData) => {
+  const openPayment = (loan: LoanData) => {
     setSelectedLoan(loan);
     setDestinationAccountId("");
     setPaymentOpen(true);
@@ -78,8 +76,8 @@ export function ReceivableList({
 
     startTransition(async () => {
       try {
-        await registerReceivablePayment({
-          receivableId: selectedLoan.id,
+        await registerLoanPayment({
+          loanId: selectedLoan.id,
           amount: Number(formData.get("amount")),
           destinationAccountId,
           paymentDate: formData.get("paymentDate") as string,
@@ -103,6 +101,18 @@ export function ReceivableList({
             receivableStatusLabels[
               loan.status as keyof typeof receivableStatusLabels
             ] ?? loan.status;
+          const interestLabel =
+            interestTypeLabels[
+              loan.interestType as keyof typeof interestTypeLabels
+            ] ?? loan.interestType;
+          const daysLabel =
+            loan.status === "PAID"
+              ? "Liquidado"
+              : loan.isOverdue
+                ? `${Math.abs(loan.daysUntilDue)} días de mora`
+                : loan.daysUntilDue === 0
+                  ? "Vence hoy"
+                  : `${loan.daysUntilDue} días restantes`;
 
           return (
             <motion.div
@@ -112,12 +122,28 @@ export function ReceivableList({
               transition={{ delay: index * 0.06 }}
               whileHover={{ y: -4 }}
             >
-              <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
+              <Card
+                className={cn(
+                  "border-border/60 bg-card/80 backdrop-blur-sm",
+                  loan.isOverdue && "border-destructive/40"
+                )}
+              >
                 <CardHeader>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600">
-                        <HandCoins className="h-5 w-5" />
+                      <div
+                        className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-xl",
+                          loan.isOverdue
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-sky-500/10 text-sky-600"
+                        )}
+                      >
+                        {loan.isOverdue ? (
+                          <AlertTriangle className="h-5 w-5" />
+                        ) : (
+                          <HandCoins className="h-5 w-5" />
+                        )}
                       </div>
                       <div>
                         <CardTitle className="text-lg">{loan.debtorName}</CardTitle>
@@ -131,10 +157,13 @@ export function ReceivableList({
                       variant="outline"
                       className={cn(
                         loan.status === "PAID" && "border-emerald-500 text-emerald-600",
-                        loan.status === "ACTIVE" && "border-sky-500 text-sky-600"
+                        loan.status === "ACTIVE" &&
+                          !loan.isOverdue &&
+                          "border-sky-500 text-sky-600",
+                        loan.isOverdue && "border-destructive text-destructive"
                       )}
                     >
-                      {statusLabel}
+                      {loan.isOverdue ? "En mora" : statusLabel}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -144,6 +173,12 @@ export function ReceivableList({
                       <p className="text-muted-foreground">Capital prestado</p>
                       <p className="font-semibold">
                         {formatCurrency(loan.principalAmount)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Total a recuperar</p>
+                      <p className="font-semibold">
+                        {formatCurrency(loan.expectedReturnAmount)}
                       </p>
                     </div>
                     <div>
@@ -159,14 +194,44 @@ export function ReceivableList({
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Tasa de interés</p>
+                      <p className="text-muted-foreground">Intereses del préstamo</p>
+                      <p className="font-semibold">
+                        {formatCurrency(loan.totalInterest)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Tasa ({interestLabel})</p>
                       <p className="font-semibold">{loan.interestRate}%</p>
                     </div>
                   </div>
 
+                  <div className="flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2 text-sm">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <CalendarClock className="h-4 w-4" />
+                      <span>
+                        Vence el{" "}
+                        {formatUserDate(loan.dueDate, "d MMM yyyy", timezone)}
+                      </span>
+                    </div>
+                    <span
+                      className={cn(
+                        "font-medium",
+                        loan.isOverdue
+                          ? "text-destructive"
+                          : loan.daysUntilDue <= 7
+                            ? "text-amber-600"
+                            : "text-emerald-600"
+                      )}
+                    >
+                      {daysLabel}
+                    </span>
+                  </div>
+
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Progreso de cobro</span>
+                      <span className="text-muted-foreground">
+                        Progreso (capital + intereses)
+                      </span>
                       <span className="font-medium">
                         {formatPercent(loan.progressPercent)}
                       </span>
@@ -180,22 +245,29 @@ export function ReceivableList({
                   </div>
 
                   {loan.payments.length > 0 && (
-                    <div className="rounded-xl bg-muted/40 p-3 text-sm space-y-2">
+                    <div className="space-y-2 rounded-xl bg-muted/40 p-3 text-sm">
                       <p className="font-medium text-muted-foreground">
                         Últimos abonos
                       </p>
                       {loan.payments.slice(0, 3).map((payment) => (
-                        <div
-                          key={payment.id}
-                          className="flex justify-between gap-2"
-                        >
-                          <span>
-                            {formatUserDate(payment.paymentDate, "d MMM yyyy", timezone)}{" "}
-                            → {payment.destinationAccount}
-                          </span>
-                          <span className="font-medium text-emerald-600">
-                            {formatCurrency(payment.amount)}
-                          </span>
+                        <div key={payment.id} className="space-y-0.5">
+                          <div className="flex justify-between gap-2">
+                            <span>
+                              {formatUserDate(
+                                payment.paymentDate,
+                                "d MMM yyyy",
+                                timezone
+                              )}{" "}
+                              → {payment.destinationAccount}
+                            </span>
+                            <span className="font-medium text-emerald-600">
+                              {formatCurrency(payment.amount)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Capital {formatCurrency(payment.principalPaid)} · Interés{" "}
+                            {formatCurrency(payment.interestPaid)}
+                          </p>
                         </div>
                       ))}
                     </div>
@@ -238,16 +310,17 @@ export function ReceivableList({
           {selectedLoan && (
             <form onSubmit={handlePaymentSubmit} className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Deudor: <span className="font-medium">{selectedLoan.debtorName}</span>
+                Deudor:{" "}
+                <span className="font-medium">{selectedLoan.debtorName}</span>
                 {" · "}
-                Pendiente:{" "}
+                Pendiente (capital + intereses):{" "}
                 <span className="font-medium text-amber-600">
                   {formatCurrency(selectedLoan.outstandingBalance)}
                 </span>
               </p>
-              <p className="text-xs text-muted-foreground rounded-lg bg-muted/50 p-2">
-                Este abono es un traslado interno: no se registrará como ingreso
-                en tus métricas de ganancias.
+              <p className="rounded-lg bg-muted/50 p-2 text-xs text-muted-foreground">
+                El abono se aplica primero a intereses pendientes y luego a capital.
+                No se marca como pagado hasta cubrir el total acordado.
               </p>
               <div className="space-y-2">
                 <Label htmlFor="payment-amount">Monto del abono</Label>

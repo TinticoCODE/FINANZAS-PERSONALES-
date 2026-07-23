@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
 import {
   mapAccount,
-  mapAccountReceivable,
+  mapLoan,
   mapBudget,
   mapCreditCard,
   mapReminder,
@@ -20,7 +20,8 @@ import {
   previousLocalMonth,
   toUserLocalTime,
 } from "@/domain/billing/timezone";
-import { formatUserMonthYear } from "@/utils/dates";
+import { computeLoansSummary } from "@/domain/loans/loan-calculations";
+import { formatUserDate, formatUserMonthYear } from "@/utils/dates";
 import {
   calculatePaymentToAvoidInterest,
   type CreditCardPurchase,
@@ -174,9 +175,10 @@ export async function getSavingsGoals() {
 
 export async function getLoansData() {
   const userId = await getDefaultUserId();
+  const timezone = await getUserTimezone();
 
-  const [receivables, accounts] = await Promise.all([
-    prisma.accountReceivable.findMany({
+  const [loansRaw, accounts] = await Promise.all([
+    prisma.loan.findMany({
       where: { userId },
       include: {
         sourceAccount: true,
@@ -194,17 +196,8 @@ export async function getLoansData() {
     }),
   ]);
 
-  const loans = receivables.map(mapAccountReceivable);
-
-  const summary: LoansSummaryData = {
-    totalOutstanding: loans
-      .filter((l) => l.status === "ACTIVE")
-      .reduce((sum, l) => sum + l.outstandingBalance, 0),
-    totalPrincipalLent: loans.reduce((sum, l) => sum + l.principalAmount, 0),
-    totalCollected: loans.reduce((sum, l) => sum + l.collectedAmount, 0),
-    activeLoans: loans.filter((l) => l.status === "ACTIVE").length,
-    paidLoans: loans.filter((l) => l.status === "PAID").length,
-  };
+  const loans = loansRaw.map((loan) => mapLoan(loan, timezone));
+  const summary = computeLoansSummary(loans);
 
   return { loans, summary, accounts };
 }

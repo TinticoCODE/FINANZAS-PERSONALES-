@@ -103,33 +103,50 @@ export type RecurringTransactionData = {
   isActive: boolean;
 };
 
-export type ReceivablePaymentData = {
+export type LoanPaymentData = {
   id: string;
   amount: number;
+  principalPaid: number;
+  interestPaid: number;
   paymentDate: string;
   destinationAccount: string;
   notes?: string;
 };
 
-export type AccountReceivableData = {
+export type LoanData = {
   id: string;
   debtorName: string;
   principalAmount: number;
   outstandingBalance: number;
   interestRate: number;
+  interestType: string;
+  expectedReturnAmount: number;
+  totalInterest: number;
   loanDate: string;
+  dueDate: string;
   status: string;
   sourceAccount: string;
   sourceAccountId: string;
   notes?: string;
   collectedAmount: number;
+  principalCollected: number;
+  interestCollected: number;
   progressPercent: number;
-  payments: ReceivablePaymentData[];
+  daysUntilDue: number;
+  isOverdue: boolean;
+  payments: LoanPaymentData[];
 };
+
+/** @deprecated Use LoanData */
+export type AccountReceivableData = LoanData;
+
+/** @deprecated Use LoanPaymentData */
+export type ReceivablePaymentData = LoanPaymentData;
 
 export type LoansSummaryData = {
   totalOutstanding: number;
   totalPrincipalLent: number;
+  totalExpectedReturn: number;
   totalCollected: number;
   activeLoans: number;
   paidLoans: number;
