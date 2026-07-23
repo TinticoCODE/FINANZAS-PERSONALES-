@@ -400,6 +400,67 @@ export async function updateSavingsGoal(
   revalidateAll();
 }
 
+export async function contributeToSavingsGoal(data: {
+  goalId: string;
+  amount: number;
+  sourceAccountId: string;
+}) {
+  const userId = await getDefaultUserId();
+  const amount = data.amount;
+
+  if (amount <= 0) {
+    return { ok: false as const, error: "El aporte debe ser mayor a cero" };
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const goal = await tx.savingsGoal.findFirst({
+        where: { id: data.goalId, userId },
+      });
+      if (!goal) throw new Error("GOAL_NOT_FOUND");
+
+      const account = await tx.account.findFirst({
+        where: { id: data.sourceAccountId, userId, isActive: true },
+      });
+      if (!account) throw new Error("ACCOUNT_NOT_FOUND");
+
+      const balance = toNumber(account.balance);
+      if (balance < amount) throw new Error("INSUFFICIENT_BALANCE");
+
+      const targetAmount = toNumber(goal.targetAmount);
+      const currentSaved = toNumber(goal.savedAmount);
+      const newSaved = Math.min(currentSaved + amount, targetAmount);
+
+      await tx.account.update({
+        where: { id: data.sourceAccountId },
+        data: { balance: { decrement: amount } },
+      });
+
+      await tx.savingsGoal.update({
+        where: { id: data.goalId },
+        data: { savedAmount: newSaved },
+      });
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.message === "GOAL_NOT_FOUND") {
+        return { ok: false as const, error: "Meta de ahorro no encontrada" };
+      }
+      if (err.message === "ACCOUNT_NOT_FOUND") {
+        return { ok: false as const, error: "Cuenta bancaria no encontrada" };
+      }
+      if (err.message === "INSUFFICIENT_BALANCE") {
+        return { ok: false as const, error: "Saldo insuficiente en la cuenta seleccionada" };
+      }
+    }
+    console.error("contributeToSavingsGoal failed:", err);
+    return { ok: false as const, error: "No se pudo registrar el aporte" };
+  }
+
+  revalidateAll();
+  return { ok: true as const };
+}
+
 export async function deleteSavingsGoal(id: string) {
   const userId = await getDefaultUserId();
   await prisma.savingsGoal.delete({ where: { id, userId } });

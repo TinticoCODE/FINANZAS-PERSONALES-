@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { createSavingsGoal, deleteSavingsGoal, updateSavingsGoal } from "@/actions/finance.actions";
+import { createSavingsGoal, deleteSavingsGoal } from "@/actions/finance.actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,13 +18,14 @@ import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/shared/page-header";
 import { GoalList } from "@/features/goals/goal-list";
 import { EmptyState } from "@/components/shared/empty-state";
-import type { SavingsGoalData } from "@/types";
+import type { AccountData, SavingsGoalData } from "@/types";
 
 type GoalsViewProps = {
   goals: SavingsGoalData[];
+  accounts: AccountData[];
 };
 
-export function GoalsView({ goals }: GoalsViewProps) {
+export function GoalsView({ goals, accounts }: GoalsViewProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -52,16 +53,8 @@ export function GoalsView({ goals }: GoalsViewProps) {
     });
   };
 
-  const handleAddSavings = (id: string, amount: number) => {
-    const goal = goals.find((g) => g.id === id);
-    if (!goal) return;
-
-    startTransition(async () => {
-      await updateSavingsGoal(id, {
-        savedAmount: goal.savedAmount + amount,
-      });
-      router.refresh();
-    });
+  const handleContributionSuccess = () => {
+    router.refresh();
   };
 
   return (
@@ -119,8 +112,9 @@ export function GoalsView({ goals }: GoalsViewProps) {
       ) : (
         <GoalList
           goals={goals}
+          accounts={accounts}
           onDelete={handleDelete}
-          onAddSavings={handleAddSavings}
+          onContributionSuccess={handleContributionSuccess}
           deleting={pending}
         />
       )}
