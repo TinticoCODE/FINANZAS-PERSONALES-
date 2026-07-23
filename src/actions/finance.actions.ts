@@ -12,6 +12,10 @@ import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
 import { getDefaultUserId, getUserTimezone } from "@/lib/user";
 import {
+  computeInstallmentAmount,
+  isMsiTerm,
+} from "@/domain/credit/msi.constants";
+import {
   computeNextRunAt,
   localMidnightToUtc,
 } from "@/domain/billing/timezone";
@@ -180,6 +184,34 @@ export async function deleteCreditCard(id: string) {
   revalidateAll();
 }
 
+function resolveCreditInstallmentFields(
+  amount: number,
+  installments: number,
+  hasZeroInterest?: boolean
+) {
+  const totalInstallments = Math.max(1, installments);
+
+  if (totalInstallments < 1 || totalInstallments > 48) {
+    throw new Error("El número de cuotas debe estar entre 1 y 48");
+  }
+
+  const isInstallments = totalInstallments > 1;
+  const zeroInterest = Boolean(hasZeroInterest) && isInstallments;
+
+  if (zeroInterest && !isMsiTerm(totalInstallments)) {
+    throw new Error("Las compras MSI solo permiten plazos de 3, 6 o 9 meses");
+  }
+
+  return {
+    installments: totalInstallments,
+    isInstallments,
+    hasZeroInterest: zeroInterest,
+    installmentAmount: isInstallments
+      ? computeInstallmentAmount(amount, totalInstallments)
+      : null,
+  };
+}
+
 export async function createTransaction(data: {
   accountId?: string;
   categoryId: string;
@@ -191,9 +223,22 @@ export async function createTransaction(data: {
   tags?: string[];
   date?: string;
   installments?: number;
+  hasZeroInterest?: boolean;
 }) {
   const userId = await getDefaultUserId();
-  const installments = Math.max(1, data.installments ?? 1);
+  const installmentFields =
+    data.paymentMethod === "CREDIT" && data.creditCardId
+      ? resolveCreditInstallmentFields(
+          data.amount,
+          data.installments ?? 1,
+          data.hasZeroInterest
+        )
+      : {
+          installments: 1,
+          isInstallments: false,
+          hasZeroInterest: false,
+          installmentAmount: null,
+        };
 
   validateTransactionFunding({
     type: data.type,
@@ -201,12 +246,6 @@ export async function createTransaction(data: {
     accountId: data.accountId,
     creditCardId: data.creditCardId,
   });
-
-  if (data.paymentMethod === "CREDIT" && data.creditCardId) {
-    if (installments < 1 || installments > 48) {
-      throw new Error("El número de cuotas debe estar entre 1 y 48");
-    }
-  }
 
   await prisma.$transaction(async (tx) => {
     await tx.transaction.create({
@@ -219,7 +258,10 @@ export async function createTransaction(data: {
         amount: data.amount,
         description: data.description,
         paymentMethod: data.paymentMethod,
-        installments,
+        installments: installmentFields.installments,
+        isInstallments: installmentFields.isInstallments,
+        hasZeroInterest: installmentFields.hasZeroInterest,
+        installmentAmount: installmentFields.installmentAmount,
         tags: data.tags ?? [],
         date: data.date
           ? parseLocalDateToUtc(data.date, await getUserTimezone())
@@ -246,16 +288,12 @@ export async function createCreditCardTransaction(data: {
   description?: string;
   date: string;
   installments: number;
+  hasZeroInterest?: boolean;
 }) {
-  const userId = await getDefaultUserId();
   const installments = Math.max(1, data.installments);
 
-  if (installments < 1 || installments > 48) {
-    throw new Error("El número de cuotas debe estar entre 1 y 48");
-  }
-
   const card = await prisma.creditCard.findFirst({
-    where: { id: data.creditCardId, userId, isActive: true },
+    where: { id: data.creditCardId, userId: await getDefaultUserId(), isActive: true },
   });
 
   if (!card) throw new Error("Tarjeta de crédito no encontrada");
@@ -269,6 +307,7 @@ export async function createCreditCardTransaction(data: {
     paymentMethod: "CREDIT",
     date: data.date,
     installments,
+    hasZeroInterest: data.hasZeroInterest,
   });
 }
 

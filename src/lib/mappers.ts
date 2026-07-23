@@ -80,6 +80,11 @@ export function mapTransaction(tx: TransactionWithRelations): TransactionUI {
     description: tx.description ?? "",
     tags: tx.tags,
     installments: tx.installments,
+    isInstallments: tx.isInstallments,
+    installmentAmount: tx.installmentAmount
+      ? toNumber(tx.installmentAmount)
+      : undefined,
+    hasZeroInterest: tx.hasZeroInterest,
     creditCardId: tx.creditCardId ?? undefined,
     fundSource,
   };

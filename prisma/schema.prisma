@@ -122,6 +122,12 @@ model Transaction {
   description   String?
   paymentMethod PaymentMethod   @default(DEBIT)
   installments  Int             @default(1)
+  /// Compra diferida a cuotas (MSI o con interés).
+  isInstallments    Boolean     @default(false)
+  /// Cuota mensual fija (principal/N en MSI; amortización en diferido con interés).
+  installmentAmount Decimal?    @db.Decimal(12, 2)
+  /// Meses sin intereses (3, 6, 9) — excluye la compra del cálculo de intereses punitorios.
+  hasZeroInterest   Boolean     @default(false)
   tags          String[]        @default([])
   attachmentUrl String?
   /// Stored as UTC (timestamptz). Business meaning is interpreted in User.timezone.

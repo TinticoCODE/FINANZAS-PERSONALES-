@@ -84,6 +84,11 @@ export function CreditCardItem({ card, onDelete, deleting }: CreditCardItemProps
   const minPayment = card.minPayment ?? card.usedBalance * 0.05;
   const singleInstallmentDue =
     card.singleInstallmentDue ?? Math.round(card.usedBalance * 0.45 * 100) / 100;
+  const msiInstallmentsDue = card.msiInstallmentsDue ?? 0;
+  const interestBearingDeferred = Math.max(
+    (card.deferredInstallmentsDue ?? 0) - msiInstallmentsDue,
+    0
+  );
   const deferredInstallmentsDue =
     card.deferredInstallmentsDue ?? Math.max(card.usedBalance - singleInstallmentDue, 0);
   const monthlyRate = teaToMonthlyPercent(card.interestRate);
@@ -239,14 +244,26 @@ export function CreditCardItem({ card, onDelete, deleting }: CreditCardItemProps
                   </span>
                   <span>{formatCurrency(singleInstallmentDue)}</span>
                 </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    Compras diferidas (Generando interés)
-                  </span>
-                  <span className="text-amber-600">
-                    {formatCurrency(deferredInstallmentsDue)}
-                  </span>
-                </div>
+                {msiInstallmentsDue > 0 && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      Cuotas MSI del mes (0% interés)
+                    </span>
+                    <span className="text-emerald-600">
+                      {formatCurrency(msiInstallmentsDue)}
+                    </span>
+                  </div>
+                )}
+                {interestBearingDeferred > 0 && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      Compras diferidas (Generando interés)
+                    </span>
+                    <span className="text-amber-600">
+                      {formatCurrency(interestBearingDeferred)}
+                    </span>
+                  </div>
+                )}
               </div>
             </AccordionContent>
           </AccordionItem>

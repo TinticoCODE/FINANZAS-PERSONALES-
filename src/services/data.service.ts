@@ -67,6 +67,9 @@ async function enrichCreditCardsWithPayments(
       date: true,
       amount: true,
       installments: true,
+      isInstallments: true,
+      installmentAmount: true,
+      hasZeroInterest: true,
     },
   });
 
@@ -78,6 +81,11 @@ async function enrichCreditCardsWithPayments(
       date: tx.date,
       amount: toNumber(tx.amount),
       installments: tx.installments ?? 1,
+      isInstallments: tx.isInstallments,
+      installmentAmount: tx.installmentAmount
+        ? toNumber(tx.installmentAmount)
+        : undefined,
+      hasZeroInterest: tx.hasZeroInterest,
     });
     purchasesByCard.set(tx.creditCardId, list);
   }
@@ -101,6 +109,7 @@ async function enrichCreditCardsWithPayments(
       paymentToAvoidInterest: payment.total,
       singleInstallmentDue: payment.singleInstallmentCurrentCycle,
       deferredInstallmentsDue: payment.deferredInstallmentsDue,
+      msiInstallmentsDue: payment.msiInstallmentsDue,
       minPayment: Math.max(mapped.usedBalance * 0.05, 0),
     };
   });

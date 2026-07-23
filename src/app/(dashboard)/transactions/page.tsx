@@ -23,6 +23,8 @@ export default async function TransactionsPage() {
         id: c.id,
         name: c.name,
         interestRate: c.interestRate,
+        cutOffDate: c.cutOffDate,
+        paymentDueDate: c.paymentDueDate,
       }))}
     />
   );

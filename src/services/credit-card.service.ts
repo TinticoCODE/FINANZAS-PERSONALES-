@@ -13,6 +13,9 @@ export type CreditCardPurchase = {
   date: Date;
   amount: number;
   installments: number;
+  isInstallments?: boolean;
+  installmentAmount?: number;
+  hasZeroInterest?: boolean;
 };
 
 export type InstallmentBreakdown = {
@@ -32,6 +35,7 @@ export type PaymentToAvoidInterest = {
   total: number;
   singleInstallmentCurrentCycle: number;
   deferredInstallmentsDue: number;
+  msiInstallmentsDue: number;
   cycle: StatementCycle;
   paymentDueDate: Date;
   installmentPreview?: InstallmentBreakdown[];
@@ -61,11 +65,12 @@ export function teaToMonthlyPercent(teaPercent: number): number {
   return round2(teaToMonthlyRate(teaPercent) * 100);
 }
 
-/** Amortización francesa. Cuota 1 = 0% interés. */
+/** Amortización francesa. Cuota 1 = 0% interés en pago único. MSI = cuotas iguales sin interés. */
 export function buildAmortizationSchedule(
   principal: number,
   installments: number,
-  teaPercent: number
+  teaPercent: number,
+  hasZeroInterest = false
 ): InstallmentBreakdown[] {
   if (installments <= 1) {
     return [
@@ -77,6 +82,10 @@ export function buildAmortizationSchedule(
         remainingBalance: 0,
       },
     ];
+  }
+
+  if (hasZeroInterest || teaPercent <= 0) {
+    return buildZeroInterestSchedule(principal, installments);
   }
 
   const monthlyRate = teaToMonthlyRate(teaPercent);
@@ -103,6 +112,63 @@ export function buildAmortizationSchedule(
   }
 
   return schedule;
+}
+
+/** Cuotas iguales sin interés (MSI). */
+export function buildZeroInterestSchedule(
+  principal: number,
+  installments: number
+): InstallmentBreakdown[] {
+  const basePayment = round2(principal / installments);
+  const schedule: InstallmentBreakdown[] = [];
+  let remaining = principal;
+
+  for (let i = 1; i <= installments; i++) {
+    const payment =
+      i === installments ? round2(remaining) : basePayment;
+    remaining = round2(Math.max(remaining - payment, 0));
+    schedule.push({
+      installmentNumber: i,
+      payment,
+      principal: payment,
+      interest: 0,
+      remainingBalance: remaining,
+    });
+  }
+
+  return schedule;
+}
+
+function getDueInstallmentAmount(
+  purchase: CreditCardPurchase,
+  config: CreditCardBillingConfig,
+  paymentDueDate: Date
+): number {
+  const installments = Math.max(1, purchase.installments);
+  if (installments === 1) return purchase.amount;
+
+  const paymentDates = getInstallmentPaymentDates(
+    purchase.date,
+    installments,
+    config.cutOffDate,
+    config.paymentDueDate
+  );
+  const dueIndex = paymentDates.findIndex((d) => sameMonthYear(d, paymentDueDate));
+  if (dueIndex < 0 || dueIndex >= installments) return 0;
+
+  if (purchase.hasZeroInterest) {
+    return (
+      purchase.installmentAmount ?? round2(purchase.amount / installments)
+    );
+  }
+
+  const schedule = buildAmortizationSchedule(
+    purchase.amount,
+    installments,
+    config.interestRate,
+    false
+  );
+  return schedule[dueIndex]?.payment ?? 0;
 }
 
 /** Ciclo de facturación que contiene la fecha de compra. */
@@ -262,6 +328,7 @@ export function calculatePaymentToAvoidInterest(
 
   let singleInstallmentCurrentCycle = 0;
   let deferredInstallmentsDue = 0;
+  let msiInstallmentsDue = 0;
 
   for (const purchase of purchases) {
     const installments = Math.max(1, purchase.installments);
@@ -281,30 +348,28 @@ export function calculatePaymentToAvoidInterest(
 
     if (!isFromPreviousCycle) continue;
 
-    const schedule = buildAmortizationSchedule(
-      purchase.amount,
-      installments,
-      config.interestRate
-    );
-    const paymentDates = getInstallmentPaymentDates(
-      purchase.date,
-      installments,
-      config.cutOffDate,
-      config.paymentDueDate
+    const dueAmount = getDueInstallmentAmount(
+      purchase,
+      config,
+      paymentDueDate
     );
 
-    const dueIndex = paymentDates.findIndex((d) =>
-      sameMonthYear(d, paymentDueDate)
-    );
-    if (dueIndex >= 0 && dueIndex < schedule.length) {
-      deferredInstallmentsDue += schedule[dueIndex].payment;
+    if (dueAmount <= 0) continue;
+
+    if (purchase.hasZeroInterest) {
+      msiInstallmentsDue += dueAmount;
+    } else {
+      deferredInstallmentsDue += dueAmount;
     }
   }
 
   return {
-    total: round2(singleInstallmentCurrentCycle + deferredInstallmentsDue),
+    total: round2(
+      singleInstallmentCurrentCycle + deferredInstallmentsDue + msiInstallmentsDue
+    ),
     singleInstallmentCurrentCycle: round2(singleInstallmentCurrentCycle),
-    deferredInstallmentsDue: round2(deferredInstallmentsDue),
+    deferredInstallmentsDue: round2(deferredInstallmentsDue + msiInstallmentsDue),
+    msiInstallmentsDue: round2(msiInstallmentsDue),
     cycle,
     paymentDueDate,
   };
@@ -314,22 +379,51 @@ export function calculatePaymentToAvoidInterest(
 export function previewCreditPurchase(
   amount: number,
   installments: number,
-  teaPercent: number
+  teaPercent: number,
+  options?: {
+    hasZeroInterest?: boolean;
+    cutOffDate?: number;
+    paymentDueDate?: number;
+    purchaseDate?: Date;
+  }
 ): {
   schedule: InstallmentBreakdown[];
   monthlyPayment: number;
   totalInterest: number;
   hasInterest: boolean;
+  paymentDates: Date[];
+  isMsi: boolean;
 } {
-  const schedule = buildAmortizationSchedule(amount, installments, teaPercent);
+  const hasZeroInterest = options?.hasZeroInterest ?? false;
+  const schedule = buildAmortizationSchedule(
+    amount,
+    installments,
+    teaPercent,
+    hasZeroInterest
+  );
   const totalInterest = round2(
     schedule.reduce((sum, row) => sum + row.interest, 0)
   );
+
+  const paymentDates =
+    installments > 1 &&
+    options?.cutOffDate &&
+    options?.paymentDueDate &&
+    options?.purchaseDate
+      ? getInstallmentPaymentDates(
+          options.purchaseDate,
+          installments,
+          options.cutOffDate,
+          options.paymentDueDate
+        )
+      : [];
 
   return {
     schedule,
     monthlyPayment: schedule[0]?.payment ?? amount,
     totalInterest,
-    hasInterest: installments > 1 && teaPercent > 0,
+    hasInterest: installments > 1 && !hasZeroInterest && teaPercent > 0,
+    paymentDates,
+    isMsi: hasZeroInterest && installments > 1,
   };
 }

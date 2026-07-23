@@ -25,6 +25,9 @@ export type Transaction = {
   description: string;
   tags: string[];
   installments?: number;
+  isInstallments?: boolean;
+  installmentAmount?: number;
+  hasZeroInterest?: boolean;
   creditCardId?: string;
   fundSource: string;
 };
@@ -43,6 +46,7 @@ export type CreditCardData = {
   paymentToAvoidInterest?: number;
   singleInstallmentDue?: number;
   deferredInstallmentsDue?: number;
+  msiInstallmentsDue?: number;
   minPayment?: number;
 };
 

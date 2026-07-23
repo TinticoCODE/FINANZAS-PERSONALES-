@@ -27,17 +27,19 @@ import { PageHeader } from "@/components/shared/page-header";
 import { TransactionTable } from "@/features/transactions/transaction-table";
 import { EmptyState } from "@/components/shared/empty-state";
 import {
+  CreditInstallmentFields,
+  type CreditCardFormOption,
+} from "@/features/transactions/credit-installment-fields";
+import {
   paymentMethodLabels,
   transactionTypeLabels,
 } from "@/lib/labels";
-import { formatCurrency } from "@/lib/format";
-import { previewCreditPurchase } from "@/services/credit-card.service";
 import { todayIsoInTimezone } from "@/utils/dates";
 import { useUserTimezone } from "@/contexts/user-timezone-context";
 import type { Transaction } from "@/types";
 
 type Option = { id: string; name: string; type?: string };
-type CreditCardOption = Option & { interestRate: number };
+type CreditCardOption = CreditCardFormOption & Option;
 
 type TransactionsViewProps = {
   transactions: Transaction[];
@@ -54,6 +56,8 @@ const initialFormState = {
   creditCardId: "",
   installments: "1",
   amount: "",
+  hasZeroInterest: false,
+  purchaseDate: "",
 };
 
 export function TransactionsView({
@@ -67,7 +71,10 @@ export function TransactionsView({
   const todayIso = useMemo(() => todayIsoInTimezone(timezone), [timezone]);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [form, setForm] = useState(initialFormState);
+  const [form, setForm] = useState({
+    ...initialFormState,
+    purchaseDate: todayIso,
+  });
 
   const filteredCategories = categories.filter((c) => c.type === form.type);
   const isCreditPurchase =
@@ -80,7 +87,8 @@ export function TransactionsView({
       form.paymentMethod !== "CREDIT" &&
       form.paymentMethod !== "CASH");
 
-  const resetForm = () => setForm(initialFormState);
+  const resetForm = () =>
+    setForm({ ...initialFormState, purchaseDate: todayIso });
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -101,10 +109,13 @@ export function TransactionsView({
         amount: Number(formData.get("amount")),
         description: (formData.get("description") as string) || undefined,
         paymentMethod: form.paymentMethod,
-        date: formData.get("date") as string,
+        date: isCreditPurchase
+          ? form.purchaseDate
+          : (formData.get("date") as string),
         installments: isCreditPurchase
           ? Math.max(1, Number(formData.get("installments")) || 1)
           : 1,
+        hasZeroInterest: isCreditPurchase && form.hasZeroInterest,
       });
       handleOpenChange(false);
       router.refresh();
@@ -120,6 +131,7 @@ export function TransactionsView({
       accountId: method === "CREDIT" || method === "CASH" ? "" : prev.accountId,
       creditCardId: method === "CREDIT" ? prev.creditCardId : "",
       installments: "1",
+      hasZeroInterest: false,
       amount: method === "CREDIT" ? prev.amount : "",
     }));
   };
@@ -133,6 +145,7 @@ export function TransactionsView({
       accountId: prev.accountId,
       creditCardId: "",
       installments: "1",
+      hasZeroInterest: false,
       amount: "",
     }));
   };
@@ -160,18 +173,6 @@ export function TransactionsView({
     accounts.find((a) => a.id === form.accountId)?.name ?? "";
   const selectedCard = creditCards.find((c) => c.id === form.creditCardId);
   const selectedCardName = selectedCard?.name ?? "";
-
-  const creditPreview = useMemo(() => {
-    if (form.paymentMethod !== "CREDIT" || !selectedCard) return null;
-    const parsedAmount = Number(form.amount);
-    const parsedInstallments = Math.max(1, Number(form.installments) || 1);
-    if (!parsedAmount || parsedAmount <= 0) return null;
-    return previewCreditPurchase(
-      parsedAmount,
-      parsedInstallments,
-      selectedCard.interestRate
-    );
-  }, [form.paymentMethod, form.amount, form.installments, selectedCard]);
 
   return (
     <div className="space-y-6">
@@ -359,61 +360,22 @@ export function TransactionsView({
                 )}
 
                 {isCreditPurchase && creditCards.length > 0 && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="installments">Número de cuotas</Label>
-                        <Input
-                          id="installments"
-                          name="installments"
-                          type="number"
-                          min="1"
-                          max="48"
-                          required
-                          value={form.installments}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              installments: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="date">Fecha exacta de transacción</Label>
-                        <Input
-                          id="date"
-                          name="date"
-                          type="date"
-                          defaultValue={todayIso}
-                          required
-                        />
-                      </div>
-                    </div>
-                    {creditPreview && (
-                      <div className="rounded-xl border border-border/60 bg-muted/40 p-3 text-sm space-y-1">
-                        {Number(form.installments) === 1 ? (
-                          <p className="text-emerald-600 font-medium">
-                            1 cuota — 0% interés (periodo de gracia)
-                          </p>
-                        ) : (
-                          <>
-                            <p>
-                              Cuota mensual proyectada:{" "}
-                              <span className="font-semibold">
-                                {formatCurrency(creditPreview.monthlyPayment)}
-                              </span>
-                            </p>
-                            <p className="text-muted-foreground">
-                              TEA {selectedCard?.interestRate}% — intereses
-                              totales:{" "}
-                              {formatCurrency(creditPreview.totalInterest)}
-                            </p>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </>
+                  <CreditInstallmentFields
+                    amount={form.amount}
+                    installments={form.installments}
+                    onInstallmentsChange={(value) =>
+                      setForm((prev) => ({ ...prev, installments: value }))
+                    }
+                    hasZeroInterest={form.hasZeroInterest}
+                    onHasZeroInterestChange={(value) =>
+                      setForm((prev) => ({ ...prev, hasZeroInterest: value }))
+                    }
+                    selectedCard={selectedCard}
+                    purchaseDate={form.purchaseDate}
+                    onPurchaseDateChange={(value) =>
+                      setForm((prev) => ({ ...prev, purchaseDate: value }))
+                    }
+                  />
                 )}
 
                 {!isCreditPurchase && (
