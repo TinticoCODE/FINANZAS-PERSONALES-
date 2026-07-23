@@ -167,6 +167,32 @@ export type MonthlyDataPoint = {
   income: number;
   expenses: number;
   savings: number;
+  isMissing?: boolean;
+  isLive?: boolean;
+};
+
+export type MonthlySnapshotData = {
+  id?: string;
+  month: number;
+  year: number;
+  totalAssets: number;
+  totalLiabilities: number;
+  totalIncome: number;
+  totalExpense: number;
+  netWorth: number;
+  isLive: boolean;
+  isMissing?: boolean;
+  createdAt?: string;
+};
+
+export type ReportsPageData = {
+  year: number;
+  month: number;
+  periodLabel: string;
+  snapshots: MonthlySnapshotData[];
+  monthlyEvolution: MonthlyDataPoint[];
+  selectedSnapshot: MonthlySnapshotData | null;
+  expenseByCategory: ChartDataPoint[];
 };
 
 export type BusinessData = {

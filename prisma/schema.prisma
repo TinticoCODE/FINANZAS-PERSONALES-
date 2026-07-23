@@ -53,6 +53,7 @@ model User {
   capitalTransfers      CapitalTransfer[]
   recurringTransactions RecurringTransaction[]
   creditCardStatements  CreditCardStatement[]
+  monthlySnapshots      MonthlySnapshot[]
 }
 
 enum ReceivableStatus {
@@ -325,6 +326,24 @@ model LoanPayment {
   @@index([loanId])
   @@index([destinationAccountId])
   @@map("ReceivablePayment")
+}
+
+/// Cierre mensual inmutable — patrimonio e ingresos/gastos consolidados por mes.
+model MonthlySnapshot {
+  id                String   @id @default(cuid())
+  userId            String
+  month             Int
+  year              Int
+  totalAssets       Decimal  @db.Decimal(14, 2)
+  totalLiabilities  Decimal  @db.Decimal(14, 2)
+  totalIncome       Decimal  @db.Decimal(14, 2)
+  totalExpense      Decimal  @db.Decimal(14, 2)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month, year])
+  @@index([userId, year])
 }
 
 // ─── Business Ledger (aislado del ledger personal) ─────────────────────────

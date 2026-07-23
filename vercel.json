@@ -4,6 +4,10 @@
   "regions": ["iad1"],
   "crons": [
     {
+      "path": "/api/cron/monthly-snapshot",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/monthly-cutoff",
       "schedule": "0 5 * * *"
     },

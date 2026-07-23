@@ -26,6 +26,12 @@ import {
   previousMtdRangeUtc,
 } from "@/domain/dashboard/dashboard-metrics";
 import { computeLoansSummary } from "@/domain/loans/loan-calculations";
+import {
+  formatPeriodLabel,
+  getExpenseByCategoryForMonth,
+  getMonthlyHistoryForUser,
+  parsePeriodFromSearchParams,
+} from "@/domain/snapshots/monthly-snapshot.service";
 import { formatUserDate, formatUserMonthYear } from "@/utils/dates";
 import {
   calculatePaymentToAvoidInterest,
@@ -36,6 +42,7 @@ import type {
   CreditCardData,
   LoansSummaryData,
   MonthlyDataPoint,
+  ReportsPageData,
   StatCardData,
 } from "@/types";
 
@@ -544,12 +551,42 @@ export async function getDashboardData() {
   };
 }
 
-export async function getReportsData() {
-  const dashboard = await getDashboardData();
+export async function getReportsData(options?: {
+  year?: number;
+  month?: number;
+}): Promise<ReportsPageData> {
+  const timezone = await getUserTimezone();
+  const { year: currentYear, month: currentMonth } = getCurrentLocalMonth(timezone);
+
+  const year = options?.year ?? currentYear;
+  const month = options?.month ?? currentMonth;
+
+  const [history, expenseByCategory] = await Promise.all([
+    getMonthlyHistoryForUser(year, month),
+    getExpenseByCategoryForMonth(year, month, timezone),
+  ]);
+
+  const selectedSnapshot =
+    history.snapshots.find((snapshot) => snapshot.month === month) ?? null;
+
   return {
-    monthlyEvolution: dashboard.monthlyEvolution,
-    expenseByCategory: dashboard.expenseByCategory,
+    year,
+    month,
+    periodLabel: formatPeriodLabel(year, month),
+    snapshots: history.snapshots,
+    monthlyEvolution: history.monthlyEvolution,
+    selectedSnapshot,
+    expenseByCategory,
   };
+}
+
+export async function getReportsDataFromSearchParams(params: {
+  year?: string;
+  month?: string;
+}): Promise<ReportsPageData> {
+  const timezone = await getUserTimezone();
+  const { year, month } = parsePeriodFromSearchParams(params, timezone);
+  return getReportsData({ year, month });
 }
 
 export async function getCalendarData() {
