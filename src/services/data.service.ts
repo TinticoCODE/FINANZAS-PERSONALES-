@@ -17,9 +17,14 @@ import {
   getLocalYmd,
   localMidnightToUtc,
   monthRangeUtc,
-  previousLocalMonth,
   toUserLocalTime,
 } from "@/domain/billing/timezone";
+import {
+  computeAvailableCash,
+  computeNetWorth,
+  mtdRangeUtc,
+  previousMtdRangeUtc,
+} from "@/domain/dashboard/dashboard-metrics";
 import { computeLoansSummary } from "@/domain/loans/loan-calculations";
 import { formatUserDate, formatUserMonthYear } from "@/utils/dates";
 import {
@@ -239,10 +244,12 @@ export async function getDashboardData() {
   const now = new Date();
   const { year, month } = getCurrentLocalMonth(timezone, now);
   const { start, end } = monthRangeUtc(year, month, timezone);
-  const prev = previousLocalMonth(year, month);
-  const prevRange = monthRangeUtc(prev.year, prev.month, timezone);
 
   const todayLocal = getLocalYmd(now, timezone);
+  const mtdRange = mtdRangeUtc(year, month, todayLocal.day, timezone);
+  const prevMtdRange = previousMtdRangeUtc(year, month, todayLocal.day, timezone);
+  const mtdComparisonLabel = `vs MTD anterior (1–${todayLocal.day})`;
+
   const weekStartDate = addDays(
     new Date(todayLocal.year, todayLocal.month, todayLocal.day),
     -6
@@ -266,10 +273,12 @@ export async function getDashboardData() {
     accounts,
     cards,
     budgets,
-    monthIncome,
-    monthExpenses,
-    prevIncome,
-    prevExpenses,
+    activeLoans,
+    mtdIncomeAgg,
+    mtdExpensesAgg,
+    prevMtdIncomeAgg,
+    prevMtdExpensesAgg,
+    mtdCreditExpensesAgg,
     expenseGroups,
     monthlyTx,
     weekTx,
@@ -277,20 +286,49 @@ export async function getDashboardData() {
     prisma.account.findMany({ where: { userId, isActive: true } }),
     prisma.creditCard.findMany({ where: { userId, isActive: true } }),
     getBudgets(month, year),
+    prisma.loan.findMany({
+      where: { userId, status: "ACTIVE" },
+      select: { outstandingBalance: true },
+    }),
     prisma.transaction.aggregate({
-      where: { userId, type: "INCOME", date: { gte: start, lte: end } },
+      where: {
+        userId,
+        type: "INCOME",
+        date: { gte: mtdRange.start, lte: mtdRange.end },
+      },
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
-      where: { userId, type: "EXPENSE", date: { gte: start, lte: end } },
+      where: {
+        userId,
+        type: "EXPENSE",
+        date: { gte: mtdRange.start, lte: mtdRange.end },
+      },
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
-      where: { userId, type: "INCOME", date: { gte: prevRange.start, lte: prevRange.end } },
+      where: {
+        userId,
+        type: "INCOME",
+        date: { gte: prevMtdRange.start, lte: prevMtdRange.end },
+      },
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
-      where: { userId, type: "EXPENSE", date: { gte: prevRange.start, lte: prevRange.end } },
+      where: {
+        userId,
+        type: "EXPENSE",
+        date: { gte: prevMtdRange.start, lte: prevMtdRange.end },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.aggregate({
+      where: {
+        userId,
+        type: "EXPENSE",
+        paymentMethod: "CREDIT",
+        date: { gte: mtdRange.start, lte: mtdRange.end },
+      },
       _sum: { amount: true },
     }),
     prisma.transaction.groupBy({
@@ -320,74 +358,94 @@ export async function getDashboardData() {
     }),
   ]);
 
-  const totalBalance = accounts.reduce((sum, a) => sum + toNumber(a.balance), 0);
+  const bankBalance = accounts.reduce((sum, a) => sum + toNumber(a.balance), 0);
+  const receivablesOutstanding = activeLoans.reduce(
+    (sum, loan) => sum + toNumber(loan.outstandingBalance),
+    0
+  );
   const totalDebt = cards.reduce((sum, c) => sum + toNumber(c.usedBalance), 0);
-  const income = toNumber(monthIncome._sum.amount);
-  const expenses = toNumber(monthExpenses._sum.amount);
-  const prevIncomeVal = toNumber(prevIncome._sum.amount);
-  const prevExpensesVal = toNumber(prevExpenses._sum.amount);
-  const savings = Math.max(income - expenses, 0);
+  const budgetReserved = budgets.reduce((sum, b) => sum + b.budget, 0);
 
-  const goalsAgg = await prisma.savingsGoal.aggregate({
-    where: { userId },
-    _sum: { savedAmount: true },
-  });
-  const totalSaved = toNumber(goalsAgg._sum.savedAmount);
+  const { netWorth } = computeNetWorth(
+    bankBalance,
+    receivablesOutstanding,
+    totalDebt
+  );
+  const availableCash = computeAvailableCash(bankBalance, budgetReserved);
+
+  const mtdIncome = toNumber(mtdIncomeAgg._sum.amount);
+  const mtdExpenses = toNumber(mtdExpensesAgg._sum.amount);
+  const prevMtdIncome = toNumber(prevMtdIncomeAgg._sum.amount);
+  const prevMtdExpenses = toNumber(prevMtdExpensesAgg._sum.amount);
+  const mtdCreditExpenses = toNumber(mtdCreditExpensesAgg._sum.amount);
+  const mtdNetFlow = mtdIncome - mtdExpenses;
+  const prevMtdNetFlow = prevMtdIncome - prevMtdExpenses;
+  const mtdSavings = Math.max(mtdNetFlow, 0);
+  const prevMtdSavings = Math.max(prevMtdNetFlow, 0);
 
   const stats: StatCardData[] = [
     {
       id: "balance",
       title: "Balance total",
-      value: totalBalance,
-      previousValue: totalBalance,
+      value: netWorth,
+      previousValue: netWorth - mtdNetFlow + mtdCreditExpenses,
       icon: "wallet",
       color: "#6366f1",
       gradient: "from-indigo-500/10 to-violet-500/5",
+      comparisonLabel: mtdComparisonLabel,
     },
     {
       id: "available",
       title: "Dinero disponible",
-      value: totalBalance,
-      previousValue: totalBalance,
+      value: availableCash,
+      previousValue: computeAvailableCash(
+        bankBalance - mtdNetFlow,
+        budgetReserved
+      ),
       icon: "banknote",
       color: "#06b6d4",
       gradient: "from-cyan-500/10 to-blue-500/5",
+      comparisonLabel: mtdComparisonLabel,
     },
     {
       id: "expenses",
       title: "Gastos del mes",
-      value: expenses,
-      previousValue: prevExpensesVal,
+      value: mtdExpenses,
+      previousValue: prevMtdExpenses,
       icon: "trending-down",
       color: "#ef4444",
       gradient: "from-red-500/10 to-orange-500/5",
+      comparisonLabel: mtdComparisonLabel,
     },
     {
       id: "income",
       title: "Ingresos del mes",
-      value: income,
-      previousValue: prevIncomeVal,
+      value: mtdIncome,
+      previousValue: prevMtdIncome,
       icon: "trending-up",
       color: "#10b981",
       gradient: "from-emerald-500/10 to-green-500/5",
+      comparisonLabel: mtdComparisonLabel,
     },
     {
       id: "savings",
-      title: "Ahorros",
-      value: totalSaved || savings,
-      previousValue: 0,
+      title: "Ahorros (MTD)",
+      value: mtdSavings,
+      previousValue: prevMtdSavings,
       icon: "piggy-bank",
       color: "#8b5cf6",
       gradient: "from-violet-500/10 to-purple-500/5",
+      comparisonLabel: mtdComparisonLabel,
     },
     {
       id: "debt",
       title: "Deuda total",
       value: totalDebt,
-      previousValue: totalDebt,
+      previousValue: Math.max(totalDebt - mtdCreditExpenses, 0),
       icon: "credit-card",
       color: "#f59e0b",
       gradient: "from-amber-500/10 to-yellow-500/5",
+      comparisonLabel: mtdComparisonLabel,
     },
   ];
 
@@ -397,14 +455,19 @@ export async function getDashboardData() {
   });
   const categoryMap = new Map(categories.map((c) => [c.id, c]));
 
-  const expenseByCategory: ChartDataPoint[] = expenseGroups.map((group) => {
+  const expenseByCategoryRaw: ChartDataPoint[] = expenseGroups.map((group) => {
     const category = categoryMap.get(group.categoryId);
     return {
       name: category?.name ?? "Sin categoría",
       value: toNumber(group._sum.amount),
-      color: category?.color,
+      color: category?.color ?? "#6366f1",
     };
   });
+  const expenseTotal = expenseByCategoryRaw.reduce((sum, item) => sum + item.value, 0);
+  const expenseByCategory: ChartDataPoint[] = expenseByCategoryRaw.map((item) => ({
+    ...item,
+    percent: expenseTotal > 0 ? (item.value / expenseTotal) * 100 : 0,
+  }));
 
   const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
   const monthlyEvolution: MonthlyDataPoint[] = [];
@@ -425,8 +488,8 @@ export async function getDashboardData() {
       .reduce((sum, tx) => sum + toNumber(tx.amount), 0);
     monthlyEvolution.push({
       month: monthNames[m],
-      income: inc,
-      expenses: exp,
+      income: Math.max(inc, 0),
+      expenses: Math.max(exp, 0),
       savings: Math.max(inc - exp, 0),
     });
   }

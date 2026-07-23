@@ -8,6 +8,9 @@ export type StatCardData = {
   icon: string;
   color: string;
   gradient: string;
+  /** Si false, oculta la fila de variación MTD. */
+  showComparison?: boolean;
+  comparisonLabel?: string;
 };
 
 export type Transaction = {
@@ -156,6 +159,7 @@ export type ChartDataPoint = {
   name: string;
   value: number;
   color?: string;
+  percent?: number;
 };
 
 export type MonthlyDataPoint = {

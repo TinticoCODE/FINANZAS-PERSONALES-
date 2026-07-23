@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Bar,
@@ -24,13 +25,20 @@ type CreditDebtChartProps = {
 };
 
 export function CreditDebtChart({ cards }: CreditDebtChartProps) {
-  const chartData = cards.map((card) => ({
-    name: card.name,
-    used: card.usedBalance,
-    available: card.creditLimit - card.usedBalance,
-    utilization: (card.usedBalance / card.creditLimit) * 100,
-    color: card.color,
-  }));
+  const chartData = useMemo(
+    () =>
+      cards.map((card) => ({
+        name: card.name,
+        used: Math.max(Number(card.usedBalance) || 0, 0),
+        available: Math.max(Number(card.creditLimit - card.usedBalance) || 0, 0),
+        utilization:
+          card.creditLimit > 0
+            ? (Math.max(card.usedBalance, 0) / card.creditLimit) * 100
+            : 0,
+        color: card.color,
+      })),
+    [cards]
+  );
 
   return (
     <motion.div
@@ -41,16 +49,27 @@ export function CreditDebtChart({ cards }: CreditDebtChartProps) {
       <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-base font-semibold">Deuda de tarjetas</CardTitle>
-          <CardDescription>Utilización del crédito</CardDescription>
+          <CardDescription>Saldo utilizado por tarjeta</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[220px]">
+          <div className="h-[220px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical">
-                <XAxis type="number" tickFormatter={formatCompact} tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} />
+              <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 8 }}>
+                <XAxis
+                  type="number"
+                  tickFormatter={formatCompact}
+                  tick={{ fontSize: 12 }}
+                  domain={[0, "auto"]}
+                  allowDecimals={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={100}
+                  tick={{ fontSize: 12 }}
+                />
                 <Tooltip
-                  formatter={(value) => formatCompact(Number(value))}
+                  formatter={(value) => formatCompact(Number(value) || 0)}
                   contentStyle={{
                     borderRadius: "12px",
                     border: "1px solid hsl(var(--border))",

@@ -72,7 +72,9 @@ export function StatCard({ data, index = 0 }: StatCardProps) {
               {isPositive ? "+" : ""}
               {formatPercent(change)}
             </span>
-            <span className="text-muted-foreground">vs mes anterior</span>
+            <span className="text-muted-foreground">
+              {data.comparisonLabel ?? "vs mes anterior"}
+            </span>
           </div>
         </div>
         <div

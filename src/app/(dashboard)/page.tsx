@@ -12,7 +12,7 @@ export default async function DashboardPage() {
   const data = await getDashboardData();
 
   return (
-    <div className="space-y-8 pb-24">
+    <div className="space-y-8 pb-28">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Dashboard
@@ -28,19 +28,19 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 pb-24 lg:grid-cols-2">
         <ExpenseByCategoryChart data={data.expenseByCategory} />
         <IncomeExpenseChart data={data.monthlyEvolution} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 pb-24 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <CashFlowChart data={data.cashFlowData} />
         </div>
         <MonthlyEvolutionChart data={data.monthlyEvolution} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 pb-24 lg:grid-cols-2">
         <BudgetUsageChart data={data.budgets} />
         <CreditDebtChart cards={data.creditCards} />
       </div>
