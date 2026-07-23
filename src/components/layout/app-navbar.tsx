@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Bell, Menu, Moon, Sun, User } from "lucide-react";
+import { Bell, Menu, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -13,9 +13,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TransactionCommandMenu } from "@/features/search/transaction-command-menu";
+import { LogoutButton } from "@/features/auth/logout-button";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { Badge } from "@/components/ui/badge";
-import { LogoutMenuItem } from "@/features/auth/logout-menu-item";
 import { formatUserDate, formatUserRelative } from "@/utils/dates";
 import { useUserTimezone } from "@/contexts/user-timezone-context";
 import type { ReminderData } from "@/types";
@@ -93,29 +93,13 @@ export function AppNavbar({ reminders, userName = "Admin" }: AppNavbarProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                    {userName.slice(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>{userName}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>
-              <User className="mr-2 h-4 w-4" />
-              Perfil
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <LogoutMenuItem />
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Avatar className="h-8 w-8" title={userName}>
+          <AvatarFallback className="bg-primary/10 text-primary text-xs">
+            {userName.slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+
+        <LogoutButton />
       </div>
     </header>
   );
