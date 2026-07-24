@@ -321,13 +321,19 @@ function StockDialog({ businessId, product, open, onOpenChange }: StockDialogPro
   const [mode, setMode] = useState<StockMode>("add");
   const [quantity, setQuantity] = useState("1");
   const [unitCost, setUnitCost] = useState(String(product.unitCost || 0));
+  const [cashPaid, setCashPaid] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const totalPurchase = (Number(quantity) || 0) * (Number(unitCost) || 0);
+  const cashPaidNum = cashPaid === "" ? totalPurchase : Number(cashPaid) || 0;
+  const payableAmount = Math.max(0, totalPurchase - cashPaidNum);
 
   function handleOpenChange(next: boolean) {
     if (next) {
       setMode("add");
       setQuantity("1");
       setUnitCost(String(product.unitCost || 0));
+      setCashPaid("");
       setError(null);
     }
     onOpenChange(next);
@@ -338,6 +344,16 @@ function StockDialog({ businessId, product, open, onOpenChange }: StockDialogPro
       setError("La cantidad debe ser mayor a cero");
       return;
     }
+    const total = addQty * (Number(unitCost) || 0);
+    const paid = cashPaid === "" ? total : Number(cashPaid) || 0;
+    if (paid > total + 0.01) {
+      setError("El pago en caja no puede superar el costo total");
+      return;
+    }
+    if (total - paid > 0.01 && !product.supplierName?.trim()) {
+      setError("Indica un proveedor en el producto para registrar deuda (CxP)");
+      return;
+    }
     setError(null);
     startTransition(async () => {
       try {
@@ -346,6 +362,8 @@ function StockDialog({ businessId, product, open, onOpenChange }: StockDialogPro
           productId: product.id,
           quantity: addQty,
           unitCost: Number(unitCost) || 0,
+          cashPaid: paid,
+          supplierName: product.supplierName,
         });
         handleOpenChange(false);
         router.refresh();
@@ -463,24 +481,45 @@ function StockDialog({ businessId, product, open, onOpenChange }: StockDialogPro
           </div>
 
           {mode === "add" && (
-            <div className="space-y-2">
-              <Label htmlFor="stock-cost">Costo unitario (COGS)</Label>
-              <Input
-                id="stock-cost"
-                type="number"
-                min={0}
-                value={unitCost}
-                onChange={(e) => setUnitCost(e.target.value)}
-              />
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="stock-cost">Costo unitario (COGS)</Label>
+                <Input
+                  id="stock-cost"
+                  type="number"
+                  min={0}
+                  value={unitCost}
+                  onChange={(e) => setUnitCost(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock-cash">Pago en caja</Label>
+                <Input
+                  id="stock-cash"
+                  type="number"
+                  min={0}
+                  max={totalPurchase || undefined}
+                  placeholder={String(totalPurchase || 0)}
+                  value={cashPaid}
+                  onChange={(e) => setCashPaid(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Deja vacío para pagar todo en caja. Si la caja no alcanza, el restante se
+                  registra como CxP al proveedor del producto.
+                </p>
+              </div>
+            </>
           )}
 
           {qtyNum > 0 && (
             <p className={cn("text-xs text-muted-foreground", mode === "remove" && "text-destructive/80")}>
               {mode === "add" ? (
                 <>
-                  Nuevo stock: {product.stock + qtyNum} und · Entrada inventario:{" "}
+                  Nuevo stock: {product.stock + qtyNum} und · Costo total:{" "}
                   {formatCurrency(qtyNum * (Number(unitCost) || 0))}
+                  {payableAmount > 0.01 && (
+                    <> · CxP: {formatCurrency(payableAmount)}</>
+                  )}
                 </>
               ) : (
                 <>Nuevo stock: {Math.max(0, product.stock - qtyNum)} und</>

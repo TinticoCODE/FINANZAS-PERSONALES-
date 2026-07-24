@@ -85,11 +85,10 @@ export async function getBusinessDashboard(
   const { year, month } = getCurrentLocalMonth(timezone);
   const { start, end } = monthRangeUtc(year, month, timezone);
 
-  const [cashFlow, profitability, ownerCapital, overdueInstallments, pendingInstallments, accounts] =
+  const [cashFlow, profitability, overdueInstallments, pendingInstallments, accounts] =
     await Promise.all([
       getBusinessCashFlow(business.id),
       getProfitability(business.id, start, end),
-      getLedgerBalance(prisma, business.id, "3100"),
       prisma.saleInstallment.findMany({
         where: {
           sale: { businessId: business.id },
@@ -122,12 +121,22 @@ export async function getBusinessDashboard(
     {
       id: "capital",
       title: "Capital invertido",
-      value: ownerCapital,
-      previousValue: ownerCapital,
+      value: cashFlow.capitalInjected,
+      previousValue: cashFlow.capitalInjected,
       icon: "wallet",
       color: "#6366f1",
       gradient: "from-indigo-500/10 to-violet-500/5",
       subtitle: `ROI ${profitability.roiPct.toFixed(1)}%`,
+    },
+    {
+      id: "cash",
+      title: "Caja",
+      value: cashFlow.cashOnHand,
+      previousValue: cashFlow.cashOnHand,
+      icon: "banknote",
+      color: "#0ea5e9",
+      gradient: "from-sky-500/10 to-cyan-500/5",
+      subtitle: cashFlow.isCashConsistent ? "Balance verificado" : "Revisar libros",
     },
     {
       id: "inventory",
@@ -144,7 +153,7 @@ export async function getBusinessDashboard(
       title: "Cuentas por cobrar",
       value: cashFlow.accountsReceivable,
       previousValue: cashFlow.accountsReceivable,
-      icon: "banknote",
+      icon: "piggy-bank",
       color: "#f59e0b",
       gradient: "from-amber-500/10 to-orange-500/5",
       subtitle: `${overdueInstallments.length} en mora`,

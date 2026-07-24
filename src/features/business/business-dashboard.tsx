@@ -76,10 +76,30 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
               <CardContent className="space-y-4">
                 <div>
                   <div className="mb-1 flex justify-between text-sm">
-                    <span>Dinero en mano (caja)</span>
+                    <span>Caja (cuenta 1100)</span>
                     <span className="font-medium">{formatCurrency(cashFlow.cashOnHand)}</span>
                   </div>
                   <Progress value={cashPct} className="h-2" />
+                </div>
+                <div className="space-y-1 rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground">Fórmula de caja</p>
+                  <Row label="Capital invertido" value={cashFlow.capitalInjected} />
+                  <Row label="+ Cobros en efectivo" value={cashFlow.cashCollections} />
+                  <Row label="− Pagos a proveedores" value={-cashFlow.supplierPayments} muted />
+                  <Row label="− Gastos operativos" value={-cashFlow.operatingExpenses} muted />
+                  {cashFlow.ownerWithdrawals > 0 && (
+                    <Row label="− Retiros del dueño" value={-cashFlow.ownerWithdrawals} muted />
+                  )}
+                  <div className="flex justify-between border-t pt-2 font-medium text-foreground">
+                    <span>= Caja calculada</span>
+                    <span>{formatCurrency(cashFlow.computedCash)}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Cuentas por pagar (CxP)</span>
+                  <span className="font-medium text-amber-700 dark:text-amber-400">
+                    {formatCurrency(cashFlow.accountsPayable)}
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span>Dinero en la calle (CxC)</span>

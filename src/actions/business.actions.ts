@@ -8,7 +8,10 @@ import {
   getChartOfAccounts,
   slugifyBusinessName,
 } from "@/domain/business/chart-of-accounts";
-import { postJournalEntry, getLedgerBalance } from "@/domain/business/journal.service";
+import { postJournalEntry } from "@/domain/business/journal.service";
+import { assertSufficientCash } from "@/domain/business/business-cash-balance";
+import { recordBusinessTransaction } from "@/domain/business/business-transaction.service";
+import { postInventoryPurchase } from "@/domain/business/purchase.service";
 import {
   createBusinessSale,
   deleteBusinessSale,
@@ -165,6 +168,7 @@ export async function createBusinessProduct(data: {
   isInventoryTracked?: boolean;
   initialStock?: number;
   unitCost?: number;
+  cashPaid?: number;
   supplierName?: string;
   supplierPhone?: string;
   supplierWhatsApp?: string;
@@ -205,14 +209,14 @@ export async function createBusinessProduct(data: {
 
       if (cost > 0) {
         const totalCost = stock * cost;
-        await postJournalEntry(tx, {
+        await postInventoryPurchase(tx, {
           businessId: data.businessId,
-          entryDate: new Date(),
-          description: `Compra inicial inventario — ${product.name}`,
-          lines: [
-            { code: "1300", debit: totalCost },
-            { code: "1100", credit: totalCost },
-          ],
+          productName: product.name,
+          totalCost,
+          cashPaid: data.cashPaid ?? totalCost,
+          supplierName: data.supplierName,
+          purchaseDate: new Date(),
+          reference: `PRODUCT-${product.id}`,
         });
       }
 
@@ -237,6 +241,8 @@ export async function restockProduct(data: {
   productId: string;
   quantity: number;
   unitCost: number;
+  cashPaid?: number;
+  supplierName?: string;
   date?: Date;
 }) {
   const userId = await getDefaultUserId();
@@ -245,6 +251,10 @@ export async function restockProduct(data: {
   });
 
   await prisma.$transaction(async (tx) => {
+    const product = await tx.businessProduct.findFirstOrThrow({
+      where: { id: data.productId, businessId: data.businessId },
+    });
+
     const item = await tx.inventoryItem.upsert({
       where: {
         businessId_productId: {
@@ -266,15 +276,17 @@ export async function restockProduct(data: {
     });
 
     const totalCost = data.quantity * data.unitCost;
-    await postJournalEntry(tx, {
-      businessId: data.businessId,
-      entryDate: data.date ?? new Date(),
-      description: "Reposición de inventario",
-      lines: [
-        { code: "1300", debit: totalCost },
-        { code: "1100", credit: totalCost },
-      ],
-    });
+    if (totalCost > 0) {
+      await postInventoryPurchase(tx, {
+        businessId: data.businessId,
+        productName: product.name,
+        totalCost,
+        cashPaid: data.cashPaid ?? totalCost,
+        supplierName: data.supplierName ?? product.supplierName ?? undefined,
+        purchaseDate: data.date ?? new Date(),
+        reference: `RESTOCK-${product.id}`,
+      });
+    }
 
     await tx.inventoryMovement.create({
       data: {
@@ -487,12 +499,7 @@ export async function recordCapitalTransfer(data: {
     const isInvestment = data.type === "OWNER_INVESTMENT";
 
     if (!isInvestment) {
-      const cashOnHand = await getLedgerBalance(tx, data.businessId, "1100");
-      if (data.amount > cashOnHand + 0.01) {
-        throw new Error(
-          `Saldo insuficiente en caja del negocio (${cashOnHand.toLocaleString("es-CO")} COP disponible)`
-        );
-      }
+      await assertSufficientCash(tx, data.businessId, data.amount);
     }
 
     const entry = await postJournalEntry(tx, {
@@ -512,7 +519,7 @@ export async function recordCapitalTransfer(data: {
           ],
     });
 
-    await tx.capitalTransfer.create({
+    const transfer = await tx.capitalTransfer.create({
       data: {
         businessId: data.businessId,
         userId,
@@ -523,6 +530,17 @@ export async function recordCapitalTransfer(data: {
         journalEntryId: entry.id,
         notes: data.notes,
       },
+    });
+
+    await recordBusinessTransaction(tx, {
+      businessId: data.businessId,
+      type: isInvestment ? "CAPITAL_INJECTION" : "OWNER_WITHDRAWAL",
+      amount: data.amount,
+      cashEffect: isInvestment ? data.amount : -data.amount,
+      transactionDate: transferDate,
+      description: isInvestment ? "Inversión del dueño" : "Retiro de utilidades",
+      journalEntryId: entry.id,
+      capitalTransferId: transfer.id,
     });
 
     await tx.account.update({
@@ -558,6 +576,8 @@ export async function createBusinessExpenseAction(data: {
   });
 
   await prisma.$transaction(async (tx) => {
+    await assertSufficientCash(tx, data.businessId, data.amount);
+
     const entry = await postJournalEntry(tx, {
       businessId: data.businessId,
       entryDate: new Date(data.expenseDate),
@@ -568,7 +588,7 @@ export async function createBusinessExpenseAction(data: {
       ],
     });
 
-    await tx.businessExpense.create({
+    const expense = await tx.businessExpense.create({
       data: {
         businessId: data.businessId,
         categoryId: data.categoryId,
@@ -577,6 +597,17 @@ export async function createBusinessExpenseAction(data: {
         description: data.description,
         journalEntryId: entry.id,
       },
+    });
+
+    await recordBusinessTransaction(tx, {
+      businessId: data.businessId,
+      type: "OPERATING_EXPENSE",
+      amount: data.amount,
+      cashEffect: -data.amount,
+      transactionDate: new Date(data.expenseDate),
+      description: data.description ?? "Gasto operativo",
+      journalEntryId: entry.id,
+      expenseId: expense.id,
     });
   });
 

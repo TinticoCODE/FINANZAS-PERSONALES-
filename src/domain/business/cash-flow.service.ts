@@ -1,43 +1,38 @@
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
 import { getLedgerBalance } from "./journal.service";
+import { computeBusinessCashBalance } from "./business-cash-balance";
 
 export async function getBusinessCashFlow(businessId: string) {
-  const cashOnHand = await prisma.businessLedgerAccount
-    .findUnique({
-      where: { businessId_code: { businessId, code: "1100" } },
-      include: { lines: { select: { debit: true, credit: true } } },
-    })
-    .then((acct) =>
-      acct
-        ? acct.lines.reduce(
-            (s, l) => s + toNumber(l.debit) - toNumber(l.credit),
-            0
-          )
-        : 0
-    );
-
-  const accountsReceivable = await getLedgerBalance(
-    prisma,
-    businessId,
-    "1200"
-  );
-
-  const overdue = await prisma.saleInstallment.findMany({
-    where: {
-      sale: { businessId },
-      status: { in: ["OVERDUE", "PARTIAL"] },
-    },
-    select: { expectedAmount: true, paidAmount: true },
-  });
+  const [cashSummary, accountsReceivable, overdue] = await Promise.all([
+    computeBusinessCashBalance(prisma, businessId),
+    getLedgerBalance(prisma, businessId, "1200"),
+    prisma.saleInstallment.findMany({
+      where: {
+        sale: { businessId },
+        status: { in: ["OVERDUE", "PARTIAL"] },
+      },
+      select: { expectedAmount: true, paidAmount: true },
+    }),
+  ]);
 
   const overdueOutstanding = overdue.reduce(
     (sum, i) => sum + toNumber(i.expectedAmount) - toNumber(i.paidAmount),
     0
   );
 
+  const cashOnHand = cashSummary.ledgerCash;
+
   return {
     cashOnHand,
+    capitalInjected: cashSummary.capitalInjected,
+    cashCollections: cashSummary.cashCollections,
+    supplierPayments: cashSummary.supplierPayments,
+    operatingExpenses: cashSummary.operatingExpenses,
+    ownerWithdrawals: cashSummary.ownerWithdrawals,
+    computedCash: cashSummary.computedCash,
+    accountsPayable: cashSummary.accountsPayable,
+    isCashConsistent: cashSummary.isConsistent,
     accountsReceivable,
     totalLiquidPosition: cashOnHand + accountsReceivable,
     overdueReceivable: overdueOutstanding,

@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { postJournalEntry } from "./journal.service";
+import { recordBusinessTransaction } from "./business-transaction.service";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -168,6 +169,24 @@ export async function createBusinessSale(params: {
       });
     }
 
+    const saleType =
+      paymentTerms === "CASH"
+        ? "CASH_SALE"
+        : paymentTerms === "CREDIT_INSTALLMENTS"
+          ? "CREDIT_SALE"
+          : "CREDIT_SALE";
+
+    await recordBusinessTransaction(tx, {
+      businessId: params.businessId,
+      type: saleType,
+      amount: totalAmount,
+      cashEffect: params.cashDownPayment,
+      transactionDate: params.saleDate,
+      description: `Venta ${saleEntry.reference!}`,
+      journalEntryId: saleEntry.id,
+      saleId: sale.id,
+    });
+
     return sale;
   });
 }
@@ -200,11 +219,7 @@ export async function registerInstallmentPayment(params: {
       ],
     });
 
-    const newPaid = Number(installment.paidAmount) + params.amount;
-    const expected = Number(installment.expectedAmount);
-    const isPaid = newPaid >= expected - 0.01;
-
-    await tx.installmentPayment.create({
+    const payment = await tx.installmentPayment.create({
       data: {
         installmentId: params.installmentId,
         amount: params.amount,
@@ -213,6 +228,22 @@ export async function registerInstallmentPayment(params: {
         notes: params.notes,
       },
     });
+
+    await recordBusinessTransaction(tx, {
+      businessId: installment.sale.businessId,
+      type: "INSTALLMENT_PAYMENT",
+      amount: params.amount,
+      cashEffect: params.amount,
+      transactionDate: params.paymentDate,
+      description: `Abono cuota #${installment.installmentNo} — ${installment.sale.saleNumber}`,
+      journalEntryId: entry.id,
+      saleId: installment.saleId,
+      installmentPaymentId: payment.id,
+    });
+
+    const newPaid = Number(installment.paidAmount) + params.amount;
+    const expected = Number(installment.expectedAmount);
+    const isPaid = newPaid >= expected - 0.01;
 
     await tx.saleInstallment.update({
       where: { id: params.installmentId },

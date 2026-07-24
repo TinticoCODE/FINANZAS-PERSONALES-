@@ -408,6 +408,90 @@ enum InventoryMovementType {
   RETURN
 }
 
+enum BusinessTransactionType {
+  CAPITAL_INJECTION
+  SUPPLIER_PURCHASE
+  CASH_SALE
+  CREDIT_SALE
+  INSTALLMENT_PAYMENT
+  OPERATING_EXPENSE
+  OWNER_WITHDRAWAL
+}
+
+enum SupplierPayableStatus {
+  OPEN
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+model BusinessSupplier {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  phone      String?
+  email      String?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  business Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  payables SupplierPayable[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+}
+
+model SupplierPayable {
+  id              String                @id @default(cuid())
+  businessId      String
+  supplierId      String?
+  supplierName    String
+  description     String
+  totalAmount     Decimal               @db.Decimal(12, 2)
+  paidAmount      Decimal               @default(0) @db.Decimal(12, 2)
+  dueDate         DateTime?
+  status          SupplierPayableStatus @default(OPEN)
+  journalEntryId  String                @unique
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  business     Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  supplier     BusinessSupplier?      @relation(fields: [supplierId], references: [id])
+  journalEntry BusinessJournalEntry   @relation(fields: [journalEntryId], references: [id])
+  transactions BusinessTransaction[]
+
+  @@index([businessId, status])
+  @@index([supplierId])
+}
+
+model BusinessTransaction {
+  id                   String                  @id @default(cuid())
+  businessId           String
+  type                 BusinessTransactionType
+  amount               Decimal                 @db.Decimal(12, 2)
+  cashEffect           Decimal                 @default(0) @db.Decimal(12, 2)
+  transactionDate      DateTime
+  description          String
+  journalEntryId       String                  @unique
+  supplierPayableId    String?
+  saleId               String?
+  capitalTransferId    String?                 @unique
+  installmentPaymentId String?                 @unique
+  expenseId            String?                 @unique
+  createdAt            DateTime                @default(now())
+
+  business           Business              @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  journalEntry       BusinessJournalEntry    @relation(fields: [journalEntryId], references: [id])
+  supplierPayable    SupplierPayable?        @relation(fields: [supplierPayableId], references: [id])
+  sale               BusinessSale?           @relation(fields: [saleId], references: [id])
+  capitalTransfer    CapitalTransfer?        @relation(fields: [capitalTransferId], references: [id])
+  installmentPayment InstallmentPayment?     @relation(fields: [installmentPaymentId], references: [id])
+  expense            BusinessExpense?        @relation(fields: [expenseId], references: [id])
+
+  @@index([businessId, type])
+  @@index([businessId, transactionDate])
+}
+
 model Business {
   id           String         @id @default(cuid())
   userId       String
@@ -430,6 +514,9 @@ model Business {
   expenses           BusinessExpense[]
   expenseCategories  BusinessExpenseCategory[]
   journalEntries     BusinessJournalEntry[]
+  businessTransactions BusinessTransaction[]
+  businessSuppliers  BusinessSupplier[]
+  supplierPayables   SupplierPayable[]
 
   @@unique([userId, slug])
   @@index([userId, status])
@@ -467,6 +554,7 @@ model CapitalTransfer {
   user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   personalAccount Account              @relation(fields: [personalAccountId], references: [id])
   journalEntry    BusinessJournalEntry @relation(fields: [journalEntryId], references: [id])
+  businessTransaction BusinessTransaction?
 
   @@index([businessId, transferDate])
   @@index([personalAccountId])
@@ -575,6 +663,7 @@ model BusinessSale {
   journalEntry BusinessJournalEntry @relation(fields: [journalEntryId], references: [id])
   lines        BusinessSaleLine[]
   installments SaleInstallment[]
+  businessTransactions BusinessTransaction[]
 
   @@unique([businessId, saleNumber])
   @@index([businessId, saleDate])
@@ -630,6 +719,7 @@ model InstallmentPayment {
 
   installment  SaleInstallment      @relation(fields: [installmentId], references: [id], onDelete: Cascade)
   journalEntry BusinessJournalEntry @relation(fields: [journalEntryId], references: [id])
+  businessTransaction BusinessTransaction?
 
   @@index([installmentId])
 }
@@ -659,6 +749,7 @@ model BusinessExpense {
   business     Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
   category     BusinessExpenseCategory @relation(fields: [categoryId], references: [id])
   journalEntry BusinessJournalEntry    @relation(fields: [journalEntryId], references: [id])
+  businessTransaction BusinessTransaction?
 
   @@index([businessId, expenseDate])
 }
@@ -677,6 +768,8 @@ model BusinessJournalEntry {
   expense         BusinessExpense?
   capitalTransfer CapitalTransfer?
   installmentPay  InstallmentPayment?
+  businessTransaction BusinessTransaction?
+  supplierPayable SupplierPayable?
 
   @@index([businessId, entryDate])
 }

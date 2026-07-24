@@ -283,6 +283,14 @@ export type BusinessDashboardData = {
   kpis: BusinessKpiData[];
   cashFlow: {
     cashOnHand: number;
+    capitalInjected: number;
+    cashCollections: number;
+    supplierPayments: number;
+    operatingExpenses: number;
+    ownerWithdrawals: number;
+    computedCash: number;
+    accountsPayable: number;
+    isCashConsistent: boolean;
     accountsReceivable: number;
     totalLiquidPosition: number;
     overdueReceivable: number;
