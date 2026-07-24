@@ -46,7 +46,7 @@ export function getCurrentLocalMonth(
   return { year: local.year, month: local.month + 1 };
 }
 
-/** Rango UTC [inicio, fin] de un mes calendario en la TZ del usuario. mes = 1–12. */
+/** Rango UTC [inicio, fin] de un mes calendario en la zona horaria del usuario. mes = 1–12. */
 export function monthRangeUtc(
   year: number,
   month: number,
@@ -88,7 +88,7 @@ export function effectiveCutoffDay(
 }
 
 /**
- * ¿Es hoy (en TZ del usuario) el primer instante después del cierre?
+ * ¿Es hoy (en la zona horaria del usuario) el primer instante después del cierre?
  * Procesamos a las 00:xx del día siguiente al corte bancario.
  */
 export function isCreditCardCutoffProcessingWindow(

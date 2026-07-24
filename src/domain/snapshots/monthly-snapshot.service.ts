@@ -18,9 +18,9 @@ export type MonthlySnapshotDTO = {
   totalIncome: number;
   totalExpense: number;
   netWorth: number;
-  /** true = calculado en vivo (mes actual); false = cierre persistido. */
+  /** verdadero = calculado en vivo (mes actual); falso = cierre persistido. */
   isLive: boolean;
-  /** true = mes pasado sin cierre guardado aún. */
+  /** verdadero = mes pasado sin cierre guardado aún. */
   isMissing?: boolean;
   createdAt?: string;
 };
@@ -153,7 +153,7 @@ export async function computeLiveMonthlySnapshot(
   };
 }
 
-/** Persiste un cierre mensual (inmutable). Idempotente por @@unique. */
+/** Persiste un cierre mensual (inmutable). Idempotente por restricción única. */
 export async function persistMonthlySnapshot(
   userId: string,
   year: number,
@@ -262,7 +262,7 @@ export function snapshotsToMonthlyEvolution(snapshots: MonthlySnapshotDTO[]) {
   }));
 }
 
-/** Cierra el mes anterior para todos los usuarios (cron). */
+/** Cierra el mes anterior para todos los usuarios (tarea programada). */
 export async function closePreviousMonthForAllUsers(referenceUtc: Date = new Date()) {
   const users = await prisma.user.findMany({ select: { id: true, timezone: true } });
   let created = 0;

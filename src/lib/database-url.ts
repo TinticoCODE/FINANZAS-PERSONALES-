@@ -1,8 +1,8 @@
 /**
- * Ajusta la URL de Neon para entornos serverless (Vercel):
- * - Pooler (-pooler) para conexiones cortas
- * - connection_limit=1 para no mantener el compute despierto
- * - pool_timeout=0 para liberar conexiones de inmediato
+ * Ajusta la URL de Neon para entornos sin servidor (Vercel):
+ * - Agrupador de conexiones (-pooler) para sesiones cortas
+ * - límite de conexiones = 1 para no mantener el cómputo activo
+ * - tiempo de espera del pool = 0 para liberar conexiones de inmediato
  */
 export function resolveDatabaseUrl(raw = process.env.DATABASE_URL): string {
   if (!raw) {

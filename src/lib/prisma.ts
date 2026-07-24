@@ -16,7 +16,7 @@ export const prisma =
 
 globalForPrisma.prisma = prisma;
 
-/** Libera conexiones para que Neon entre en scale-to-zero cuanto antes. */
+/** Libera conexiones para que Neon entre en escala a cero cuanto antes. */
 export async function disconnectDb() {
   await prisma.$disconnect();
   globalForPrisma.prisma = undefined;

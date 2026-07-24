@@ -131,7 +131,7 @@ model Transaction {
   hasZeroInterest   Boolean     @default(false)
   tags          String[]        @default([])
   attachmentUrl String?
-  /// Almacenado en UTC (timestamptz). El significado de negocio se interpreta en User.timezone.
+  /// Almacenado en UTC (marca de tiempo con zona). El significado de negocio se interpreta en la zona horaria del usuario.
   date          DateTime        @default(now()) @db.Timestamptz(3)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime        @updatedAt @db.Timestamptz(3)
@@ -178,7 +178,7 @@ enum RecurrenceFrequency {
   YEARLY
 }
 
-/// Plantilla de movimiento automático. nextRunAt siempre en UTC.
+/// Plantilla de movimiento automático. próxima ejecución siempre en UTC.
 model RecurringTransaction {
   id             String              @id @default(cuid())
   userId         String
@@ -189,15 +189,15 @@ model RecurringTransaction {
   amount         Decimal             @db.Decimal(12, 2)
   description    String?
   frequency      RecurrenceFrequency
-  /// Día del mes (1-31) para MONTHLY/YEARLY. Se ajusta al último día si el mes es corto.
+  /// Día del mes (1-31) para frecuencia mensual/anual. Se ajusta al último día si el mes es corto.
   dayOfMonth     Int?
-  /// 0=domingo … 6=sábado para WEEKLY
+  /// 0=domingo … 6=sábado para frecuencia semanal
   dayOfWeek      Int?
-  /// 1-12 para YEARLY
+  /// 1-12 para frecuencia anual
   monthOfYear    Int?
   paymentMethod  PaymentMethod       @default(DEBIT)
   installments   Int                 @default(1)
-  /// Próxima ejecución programada (UTC). El cron compara contra el reloj del usuario.
+  /// Próxima ejecución programada (UTC). La tarea programada compara contra el reloj del usuario.
   nextRunAt      DateTime            @db.Timestamptz(3)
   lastRunAt      DateTime?           @db.Timestamptz(3)
   isActive       Boolean             @default(true)
@@ -213,7 +213,7 @@ model RecurringTransaction {
   @@index([nextRunAt])
 }
 
-/// Cierre de ciclo de facturación ya procesado (idempotencia del cron).
+/// Cierre de ciclo de facturación ya procesado (idempotencia de la tarea programada).
 model CreditCardStatement {
   id                 String   @id @default(cuid())
   userId             String

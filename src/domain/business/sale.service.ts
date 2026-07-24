@@ -349,7 +349,7 @@ export async function processInstallmentPayment(params: {
   });
 }
 
-/** @deprecated Usar processInstallmentPayment */
+/** Obsoleto. Usar processInstallmentPayment */
 export async function registerInstallmentPayment(params: {
   installmentId: string;
   amount: number;

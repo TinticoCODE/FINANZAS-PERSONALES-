@@ -3,7 +3,7 @@ import { closePreviousMonthForAllUsers } from "@/domain/snapshots/monthly-snapsh
 import { disconnectDb } from "@/lib/prisma";
 
 /**
- * @deprecated Usar /api/cron/daily (cron unificado para ahorrar CU-hours en Neon).
+ * Obsoleto. Usar /api/cron/daily (tarea programada unificada para ahorrar horas de cómputo en Neon).
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");

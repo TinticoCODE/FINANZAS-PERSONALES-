@@ -5,7 +5,7 @@ import { closePreviousMonthForAllUsers } from "@/domain/snapshots/monthly-snapsh
 import { disconnectDb } from "@/lib/prisma";
 
 /**
- * Cron diario unificado — una sola activación de Neon por día.
+ * Tarea programada diaria unificada — una sola activación de Neon por día.
  * Ejecuta: cierre mensual, cortes/recurrentes y mora de cuotas de negocio.
  * Programación: 0 5 * * * (05:00 UTC ≈ medianoche Colombia).
  */

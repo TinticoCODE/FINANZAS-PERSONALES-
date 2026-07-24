@@ -8,7 +8,7 @@ export type StatCardData = {
   icon: string;
   color: string;
   gradient: string;
-  /** Si false, oculta la fila de variación MTD. */
+  /** Si es falso, oculta la fila de variación del mes en curso. */
   showComparison?: boolean;
   comparisonLabel?: string;
 };
@@ -144,10 +144,10 @@ export type LoanData = {
   payments: LoanPaymentData[];
 };
 
-/** @deprecated Usar LoanData */
+/** Obsoleto. Usar LoanData */
 export type AccountReceivableData = LoanData;
 
-/** @deprecated Usar LoanPaymentData */
+/** Obsoleto. Usar LoanPaymentData */
 export type ReceivablePaymentData = LoanPaymentData;
 
 export type LoansSummaryData = {

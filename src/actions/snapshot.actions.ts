@@ -10,8 +10,8 @@ import { getDefaultUserId, getUserTimezone } from "@/lib/user";
 
 /**
  * Historial mensual/anual.
- * - Con `year`: devuelve los 12 MonthlySnapshot del año (mes actual dinámico, pasados inmutables).
- * - `month` opcional: refina el periodo seleccionado en UI.
+ * - Con `year`: devuelve los 12 cierres mensuales del año (mes actual dinámico, pasados inmutables).
+ * - `month` opcional: refina el periodo seleccionado en la interfaz.
  */
 export async function getMonthlyHistory(year: number, month?: number) {
   if (year < 2000 || year > 2100) {

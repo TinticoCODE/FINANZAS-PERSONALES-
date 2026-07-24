@@ -42,7 +42,7 @@ export function formatUserRelative(
   return formatDistanceToNow(local, { addSuffix: true, locale: es });
 }
 
-/** Comparaciones de calendario en TZ del usuario (no recalculan cortes). */
+/** Comparaciones de calendario en la zona horaria del usuario (no recalculan cortes). */
 export function isSameUserDay(
   aUtc: Date | string,
   bUtc: Date | string,

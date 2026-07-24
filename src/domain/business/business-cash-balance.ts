@@ -46,7 +46,7 @@ export async function assertSufficientCash(
  * Calcula el balance de caja con partida doble:
  * Caja = (Capital inyectado + Cobros) − (Pagos a proveedores + Gastos operativos + Retiros)
  *
- * `ledgerCash` (cuenta 1100) es la fuente de verdad; `computedCash` debe coincidir.
+ * `cajaEnLibros` (cuenta 1100) es la fuente de verdad; `cajaCalculada` debe coincidir.
  */
 export async function computeBusinessCashBalance(
   tx: DbClient,

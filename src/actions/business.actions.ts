@@ -494,7 +494,7 @@ export async function processInstallmentPaymentAction(data: {
   }
 }
 
-/** @deprecated Usar processInstallmentPaymentAction */
+/** Obsoleto. Usar processInstallmentPaymentAction */
 export async function payInstallmentAction(data: {
   installmentId: string;
   amount: number;
