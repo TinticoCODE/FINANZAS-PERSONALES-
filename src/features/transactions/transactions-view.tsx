@@ -71,6 +71,7 @@ export function TransactionsView({
   const todayIso = useMemo(() => todayIsoInTimezone(timezone), [timezone]);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [formError, setFormError] = useState<string | null>(null);
   const [form, setForm] = useState({
     ...initialFormState,
     purchaseDate: todayIso,
@@ -92,15 +93,19 @@ export function TransactionsView({
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
-    if (!nextOpen) resetForm();
+    if (!nextOpen) {
+      resetForm();
+      setFormError(null);
+    }
   };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    setFormError(null);
 
     startTransition(async () => {
-      await createTransaction({
+      const result = await createTransaction({
         accountId:
           isCreditPurchase || isCashExpense ? undefined : form.accountId || undefined,
         categoryId: form.categoryId,
@@ -117,6 +122,12 @@ export function TransactionsView({
           : 1,
         hasZeroInterest: isCreditPurchase && form.hasZeroInterest,
       });
+
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
+      }
+
       handleOpenChange(false);
       router.refresh();
     });
@@ -162,7 +173,11 @@ export function TransactionsView({
 
   const handleDelete = (id: string) => {
     startTransition(async () => {
-      await deleteTransaction(id);
+      const result = await deleteTransaction(id);
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
       router.refresh();
     });
   };
@@ -190,6 +205,11 @@ export function TransactionsView({
                 <DialogTitle>Nueva transacción</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
+                {formError && (
+                  <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {formError}
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Tipo</Label>

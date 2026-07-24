@@ -49,6 +49,7 @@ export function CreditCardTransactionForm({
   const timezone = useUserTimezone();
   const todayIso = useMemo(() => todayIsoInTimezone(timezone), [timezone]);
   const [pending, startTransition] = useTransition();
+  const [formError, setFormError] = useState<string | null>(null);
   const [creditCardId, setCreditCardId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
@@ -72,15 +73,19 @@ export function CreditCardTransactionForm({
 
   const handleOpenChange = (nextOpen: boolean) => {
     onOpenChange(nextOpen);
-    if (!nextOpen) resetForm();
+    if (!nextOpen) {
+      resetForm();
+      setFormError(null);
+    }
   };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    setFormError(null);
 
     startTransition(async () => {
-      await createCreditCardTransaction({
+      const result = await createCreditCardTransaction({
         creditCardId,
         categoryId,
         amount: Number(formData.get("amount")),
@@ -89,6 +94,12 @@ export function CreditCardTransactionForm({
         installments: Math.max(1, Number(installments) || 1),
         hasZeroInterest,
       });
+
+      if (!result.ok) {
+        setFormError(result.error);
+        return;
+      }
+
       handleOpenChange(false);
       router.refresh();
     });
@@ -101,6 +112,11 @@ export function CreditCardTransactionForm({
           <DialogTitle>Nueva transacción de tarjeta</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {formError && (
+            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {formError}
+            </p>
+          )}
           <div className="space-y-2">
             <Label>Tarjeta de crédito</Label>
             <Select

@@ -1,16 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type {
-  AccountType,
-  PaymentMethod,
-  RecurrenceFrequency,
-  ReminderType,
-  TransactionType,
+import {
+  Prisma,
+  type AccountType,
+  type PaymentMethod,
+  type RecurrenceFrequency,
+  type ReminderType,
+  type TransactionType,
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
 import { getDefaultUserId, getUserTimezone } from "@/lib/user";
+import {
+  parseCreateTransactionInput,
+  type TransactionActionResult,
+} from "@/domain/transactions/transaction.schema";
 import {
   computeInstallmentAmount,
   isMsiTerm,
@@ -41,7 +46,24 @@ function revalidateAll() {
   revalidatePath("/settings");
 }
 
-async function applyTransactionEffects(params: {
+type DbTx = Prisma.TransactionClient;
+
+function mapTransactionError(err: unknown): string {
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === "P2003") {
+      return "Cuenta, categoría o tarjeta no encontrada";
+    }
+    if (err.code === "P2025") {
+      return "Registro no encontrado";
+    }
+  }
+  if (err instanceof Error) return err.message;
+  return "No se pudo completar la operación";
+}
+
+async function applyTransactionEffects(
+  tx: DbTx,
+  params: {
   accountId?: string | null;
   creditCardId?: string | null;
   type: TransactionType;
@@ -56,7 +78,7 @@ async function applyTransactionEffects(params: {
     if (!params.accountId) {
       throw new Error("Los ingresos deben estar asociados a una cuenta bancaria");
     }
-    await prisma.account.update({
+    await tx.account.update({
       where: { id: params.accountId },
       data: { balance: { increment: amount } },
     });
@@ -64,7 +86,7 @@ async function applyTransactionEffects(params: {
   }
 
   if (params.paymentMethod === "CREDIT" && params.creditCardId) {
-    await prisma.creditCard.update({
+    await tx.creditCard.update({
       where: { id: params.creditCardId },
       data: { usedBalance: { increment: amount } },
     });
@@ -79,7 +101,7 @@ async function applyTransactionEffects(params: {
     throw new Error("Los gastos con débito o transferencia requieren una cuenta bancaria");
   }
 
-  await prisma.account.update({
+  await tx.account.update({
     where: { id: params.accountId },
     data: { balance: { decrement: amount } },
   });
@@ -90,35 +112,35 @@ function validateTransactionFunding(data: {
   paymentMethod: PaymentMethod;
   accountId?: string;
   creditCardId?: string;
-}) {
+}): string | null {
   const hasAccount = Boolean(data.accountId);
   const hasCard = Boolean(data.creditCardId);
 
   if (data.type === "INCOME") {
-    if (!hasAccount) throw new Error("Selecciona la cuenta donde ingresa el dinero");
-    if (hasCard) throw new Error("Los ingresos no pueden asociarse a una tarjeta de crédito");
-    return;
+    if (!hasAccount) return "Selecciona la cuenta donde ingresa el dinero";
+    if (hasCard) return "Los ingresos no pueden asociarse a una tarjeta de crédito";
+    return null;
   }
 
   if (data.paymentMethod === "CREDIT") {
-    if (!hasCard) throw new Error("Selecciona la tarjeta de crédito usada en la compra");
+    if (!hasCard) return "Selecciona la tarjeta de crédito usada en la compra";
     if (hasAccount) {
-      throw new Error("Un gasto a crédito no puede restar saldo de una cuenta bancaria");
+      return "Un gasto a crédito no puede restar saldo de una cuenta bancaria";
     }
-    return;
+    return null;
   }
 
   if (data.paymentMethod === "CASH") {
-    if (hasCard) {
-      throw new Error("Un gasto en efectivo no puede asociarse a una tarjeta");
-    }
-    return;
+    if (hasCard) return "Un gasto en efectivo no puede asociarse a una tarjeta";
+    return null;
   }
 
-  if (!hasAccount) throw new Error("Selecciona la cuenta bancaria del gasto");
+  if (!hasAccount) return "Selecciona la cuenta bancaria del gasto";
   if (hasCard) {
-    throw new Error("Un gasto con débito o transferencia no puede asociarse a una tarjeta");
+    return "Un gasto con débito o transferencia no puede asociarse a una tarjeta";
   }
+
+  return null;
 }
 
 export async function createAccount(data: {
@@ -212,73 +234,96 @@ function resolveCreditInstallmentFields(
   };
 }
 
-export async function createTransaction(data: {
-  accountId?: string;
-  categoryId: string;
-  creditCardId?: string;
-  type: TransactionType;
-  amount: number;
-  description?: string;
-  paymentMethod: PaymentMethod;
-  tags?: string[];
-  date?: string;
-  installments?: number;
-  hasZeroInterest?: boolean;
-}) {
-  const userId = await getDefaultUserId();
-  const installmentFields =
-    data.paymentMethod === "CREDIT" && data.creditCardId
-      ? resolveCreditInstallmentFields(
-          data.amount,
-          data.installments ?? 1,
-          data.hasZeroInterest
-        )
-      : {
-          installments: 1,
-          isInstallments: false,
-          hasZeroInterest: false,
-          installmentAmount: null,
-        };
+export async function createTransaction(
+  input: unknown
+): Promise<TransactionActionResult> {
+  const validation = parseCreateTransactionInput(input);
+  if (!validation.success) {
+    return {
+      ok: false,
+      error: validation.error,
+      fieldErrors: validation.fieldErrors,
+    };
+  }
 
-  validateTransactionFunding({
+  const data = validation.data;
+
+  const fundingError = validateTransactionFunding({
     type: data.type,
     paymentMethod: data.paymentMethod,
     accountId: data.accountId,
     creditCardId: data.creditCardId,
   });
+  if (fundingError) {
+    return { ok: false, error: fundingError };
+  }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.transaction.create({
-      data: {
-        userId,
-        accountId: data.accountId || null,
-        categoryId: data.categoryId,
-        creditCardId: data.creditCardId || null,
+  let installmentFields: {
+    installments: number;
+    isInstallments: boolean;
+    hasZeroInterest: boolean;
+    installmentAmount: number | null;
+  };
+
+  try {
+    installmentFields =
+      data.paymentMethod === "CREDIT" && data.creditCardId
+        ? resolveCreditInstallmentFields(
+            data.amount,
+            data.installments ?? 1,
+            data.hasZeroInterest
+          )
+        : {
+            installments: 1,
+            isInstallments: false,
+            hasZeroInterest: false,
+            installmentAmount: null,
+          };
+  } catch (err) {
+    return { ok: false, error: mapTransactionError(err) };
+  }
+
+  try {
+    const userId = await getDefaultUserId();
+    const timezone = await getUserTimezone();
+
+    await prisma.$transaction(async (tx) => {
+      await tx.transaction.create({
+        data: {
+          userId,
+          accountId: data.accountId || null,
+          categoryId: data.categoryId,
+          creditCardId: data.creditCardId || null,
+          type: data.type,
+          amount: data.amount,
+          description: data.description,
+          paymentMethod: data.paymentMethod,
+          installments: installmentFields.installments,
+          isInstallments: installmentFields.isInstallments,
+          hasZeroInterest: installmentFields.hasZeroInterest,
+          installmentAmount: installmentFields.installmentAmount,
+          tags: data.tags ?? [],
+          date: data.date
+            ? parseLocalDateToUtc(data.date, timezone)
+            : new Date(),
+        },
+      });
+
+      await applyTransactionEffects(tx, {
+        accountId: data.accountId,
+        creditCardId: data.creditCardId,
         type: data.type,
         amount: data.amount,
-        description: data.description,
         paymentMethod: data.paymentMethod,
-        installments: installmentFields.installments,
-        isInstallments: installmentFields.isInstallments,
-        hasZeroInterest: installmentFields.hasZeroInterest,
-        installmentAmount: installmentFields.installmentAmount,
-        tags: data.tags ?? [],
-        date: data.date
-          ? parseLocalDateToUtc(data.date, await getUserTimezone())
-          : new Date(),
-      },
+      });
     });
-
-    await applyTransactionEffects({
-      accountId: data.accountId,
-      creditCardId: data.creditCardId,
-      type: data.type,
-      amount: data.amount,
-      paymentMethod: data.paymentMethod,
-    });
-  });
+  } catch (err) {
+    console.error("createTransaction failed:", err);
+    return { ok: false, error: mapTransactionError(err) };
+  }
 
   revalidateAll();
+  return { ok: true };
 }
 
 export async function createCreditCardTransaction(data: {
@@ -289,46 +334,67 @@ export async function createCreditCardTransaction(data: {
   date: string;
   installments: number;
   hasZeroInterest?: boolean;
-}) {
+}): Promise<TransactionActionResult> {
   const installments = Math.max(1, data.installments);
 
-  const card = await prisma.creditCard.findFirst({
-    where: { id: data.creditCardId, userId: await getDefaultUserId(), isActive: true },
-  });
+  try {
+    const card = await prisma.creditCard.findFirst({
+      where: {
+        id: data.creditCardId,
+        userId: await getDefaultUserId(),
+        isActive: true,
+      },
+    });
 
-  if (!card) throw new Error("Tarjeta de crédito no encontrada");
+    if (!card) {
+      return { ok: false, error: "Tarjeta de crédito no encontrada" };
+    }
 
-  await createTransaction({
-    categoryId: data.categoryId,
-    creditCardId: data.creditCardId,
-    type: "EXPENSE",
-    amount: data.amount,
-    description: data.description,
-    paymentMethod: "CREDIT",
-    date: data.date,
-    installments,
-    hasZeroInterest: data.hasZeroInterest,
-  });
+    return createTransaction({
+      categoryId: data.categoryId,
+      creditCardId: data.creditCardId,
+      type: "EXPENSE",
+      amount: data.amount,
+      description: data.description,
+      paymentMethod: "CREDIT",
+      date: data.date,
+      installments,
+      hasZeroInterest: data.hasZeroInterest,
+    });
+  } catch (err) {
+    console.error("createCreditCardTransaction failed:", err);
+    return { ok: false, error: mapTransactionError(err) };
+  }
 }
 
-export async function deleteTransaction(id: string) {
-  const userId = await getDefaultUserId();
-  const existing = await prisma.transaction.findFirst({ where: { id, userId } });
-  if (!existing) return;
+export async function deleteTransaction(
+  id: string
+): Promise<TransactionActionResult> {
+  try {
+    const userId = await getDefaultUserId();
+    const existing = await prisma.transaction.findFirst({ where: { id, userId } });
+    if (!existing) {
+      return { ok: false, error: "Transacción no encontrada" };
+    }
 
-  await prisma.$transaction(async (tx) => {
-    await applyTransactionEffects({
-      accountId: existing.accountId,
-      creditCardId: existing.creditCardId,
-      type: existing.type,
-      amount: toNumber(existing.amount),
-      paymentMethod: existing.paymentMethod,
-      reverse: true,
+    await prisma.$transaction(async (tx) => {
+      await applyTransactionEffects(tx, {
+        accountId: existing.accountId,
+        creditCardId: existing.creditCardId,
+        type: existing.type,
+        amount: toNumber(existing.amount),
+        paymentMethod: existing.paymentMethod,
+        reverse: true,
+      });
+      await tx.transaction.delete({ where: { id } });
     });
-    await tx.transaction.delete({ where: { id } });
-  });
 
-  revalidateAll();
+    revalidateAll();
+    return { ok: true };
+  } catch (err) {
+    console.error("deleteTransaction failed:", err);
+    return { ok: false, error: mapTransactionError(err) };
+  }
 }
 
 export async function createBudget(data: {
@@ -761,12 +827,13 @@ export async function createRecurringTransaction(data: {
   const userId = await getDefaultUserId();
   const timezone = await getUserTimezone();
 
-  validateTransactionFunding({
+  const fundingError = validateTransactionFunding({
     type: data.type,
     paymentMethod: data.paymentMethod,
     accountId: data.accountId,
     creditCardId: data.creditCardId,
   });
+  if (fundingError) throw new Error(fundingError);
 
   const nextRunAt = parseLocalDateToUtc(data.startDate, timezone);
 
