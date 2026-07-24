@@ -1,7 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getDefaultUserId } from "@/lib/user";
 import { postJournalEntry } from "./journal.service";
 import { recordBusinessTransaction } from "./business-transaction.service";
+import { isBusinessCashDestination } from "./installment-payment.constants";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -191,32 +193,88 @@ export async function createBusinessSale(params: {
   });
 }
 
-export async function registerInstallmentPayment(params: {
+function buildInstallmentPaymentJournalLines(
+  amount: number,
+  toBusinessCash: boolean
+): { code: string; debit?: number; credit?: number }[] {
+  if (toBusinessCash) {
+    return [
+      { code: "1100", debit: amount },
+      { code: "1200", credit: amount },
+    ];
+  }
+
+  // Cobro directo a cuenta personal del dueño: reduce CxC y capital (sin pasar por caja 1100).
+  return [
+    { code: "3100", debit: amount },
+    { code: "1200", credit: amount },
+  ];
+}
+
+export async function processInstallmentPayment(params: {
   installmentId: string;
   amount: number;
   paymentDate: Date;
+  destinationAccountId: string;
+  userId: string;
   notes?: string;
 }) {
+  if (params.amount <= 0) {
+    throw new Error("El abono debe ser mayor a cero");
+  }
+
+  if (!params.destinationAccountId?.trim()) {
+    throw new Error("Selecciona la cuenta destino del cobro");
+  }
+
+  const toBusinessCash = isBusinessCashDestination(params.destinationAccountId);
+
   return prisma.$transaction(async (tx) => {
     const installment = await tx.saleInstallment.findUniqueOrThrow({
       where: { id: params.installmentId },
-      include: { sale: { include: { business: true } } },
+      include: {
+        sale: {
+          include: {
+            business: true,
+            customer: true,
+          },
+        },
+      },
     });
+
+    if (installment.sale.business.userId !== params.userId) {
+      throw new Error("No autorizado");
+    }
 
     const remaining =
       Number(installment.expectedAmount) - Number(installment.paidAmount);
     if (params.amount > remaining + 0.01) {
-      throw new Error(`El abono excede el saldo pendiente de la cuota ($${remaining})`);
+      throw new Error(
+        `El abono excede el saldo pendiente de la cuota (${remaining.toLocaleString("es-CO")} COP)`
+      );
+    }
+
+    let personalAccountId: string | null = null;
+
+    if (!toBusinessCash) {
+      const account = await tx.account.findFirst({
+        where: {
+          id: params.destinationAccountId,
+          userId: params.userId,
+          isActive: true,
+        },
+      });
+      if (!account) {
+        throw new Error("Cuenta destino no encontrada");
+      }
+      personalAccountId = account.id;
     }
 
     const entry = await postJournalEntry(tx, {
       businessId: installment.sale.businessId,
       entryDate: params.paymentDate,
       description: `Cobro cuota #${installment.installmentNo} — ${installment.sale.saleNumber}`,
-      lines: [
-        { code: "1100", debit: params.amount },
-        { code: "1200", credit: params.amount },
-      ],
+      lines: buildInstallmentPaymentJournalLines(params.amount, toBusinessCash),
     });
 
     const payment = await tx.installmentPayment.create({
@@ -225,6 +283,7 @@ export async function registerInstallmentPayment(params: {
         amount: params.amount,
         paymentDate: params.paymentDate,
         journalEntryId: entry.id,
+        destinationAccountId: personalAccountId,
         notes: params.notes,
       },
     });
@@ -233,13 +292,20 @@ export async function registerInstallmentPayment(params: {
       businessId: installment.sale.businessId,
       type: "INSTALLMENT_PAYMENT",
       amount: params.amount,
-      cashEffect: params.amount,
+      cashEffect: toBusinessCash ? params.amount : 0,
       transactionDate: params.paymentDate,
       description: `Abono cuota #${installment.installmentNo} — ${installment.sale.saleNumber}`,
       journalEntryId: entry.id,
       saleId: installment.saleId,
       installmentPaymentId: payment.id,
     });
+
+    if (personalAccountId) {
+      await tx.account.update({
+        where: { id: personalAccountId },
+        data: { balance: { increment: params.amount } },
+      });
+    }
 
     const newPaid = Number(installment.paidAmount) + params.amount;
     const expected = Number(installment.expectedAmount);
@@ -256,7 +322,50 @@ export async function registerInstallmentPayment(params: {
       },
     });
 
-    return entry;
+    if (installment.sale.customerId) {
+      const openInstallments = await tx.saleInstallment.findMany({
+        where: {
+          sale: {
+            businessId: installment.sale.businessId,
+            customerId: installment.sale.customerId,
+          },
+        },
+        select: { expectedAmount: true, paidAmount: true },
+      });
+
+      const outstanding = openInstallments.reduce(
+        (sum, row) =>
+          sum + Math.max(0, Number(row.expectedAmount) - Number(row.paidAmount)),
+        0
+      );
+
+      await tx.businessCustomer.update({
+        where: { id: installment.sale.customerId },
+        data: { totalOutstanding: outstanding },
+      });
+    }
+
+    return payment;
+  });
+}
+
+/** @deprecated Usar processInstallmentPayment */
+export async function registerInstallmentPayment(params: {
+  installmentId: string;
+  amount: number;
+  paymentDate: Date;
+  notes?: string;
+  userId?: string;
+}) {
+  const userId = params.userId ?? (await getDefaultUserId());
+
+  return processInstallmentPayment({
+    installmentId: params.installmentId,
+    amount: params.amount,
+    paymentDate: params.paymentDate,
+    destinationAccountId: "BUSINESS_CASH",
+    userId,
+    notes: params.notes,
   });
 }
 

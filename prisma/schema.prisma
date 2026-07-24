@@ -88,6 +88,7 @@ model Account {
   loansDisbursed       Loan[]         @relation("DisbursementAccount")
   loanPayments         LoanPayment[]  @relation("CollectionAccount")
   capitalTransfers     CapitalTransfer[]
+  installmentPayments  InstallmentPayment[]
 
   @@index([userId])
 }
@@ -710,18 +711,21 @@ model SaleInstallment {
 }
 
 model InstallmentPayment {
-  id             String   @id @default(cuid())
-  installmentId  String
-  amount         Decimal  @db.Decimal(12, 2)
-  paymentDate    DateTime
-  journalEntryId String   @unique
-  notes          String?
+  id                    String   @id @default(cuid())
+  installmentId         String
+  amount                Decimal  @db.Decimal(12, 2)
+  paymentDate           DateTime
+  journalEntryId        String   @unique
+  destinationAccountId  String?
+  notes                 String?
 
-  installment  SaleInstallment      @relation(fields: [installmentId], references: [id], onDelete: Cascade)
-  journalEntry BusinessJournalEntry @relation(fields: [journalEntryId], references: [id])
+  installment         SaleInstallment      @relation(fields: [installmentId], references: [id], onDelete: Cascade)
+  journalEntry        BusinessJournalEntry @relation(fields: [journalEntryId], references: [id])
+  destinationAccount  Account?             @relation(fields: [destinationAccountId], references: [id])
   businessTransaction BusinessTransaction?
 
   @@index([installmentId])
+  @@index([destinationAccountId])
 }
 
 model BusinessExpenseCategory {

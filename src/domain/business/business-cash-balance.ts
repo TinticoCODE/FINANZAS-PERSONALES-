@@ -86,8 +86,10 @@ export async function computeBusinessCashBalance(
       case "CAPITAL_INJECTION":
         break;
       case "CASH_SALE":
-      case "INSTALLMENT_PAYMENT":
         cashCollections += amount;
+        break;
+      case "INSTALLMENT_PAYMENT":
+        cashCollections += cashEffect;
         break;
       case "CREDIT_SALE":
         cashCollections += Math.max(cashEffect, 0);

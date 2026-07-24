@@ -141,7 +141,10 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
               <CardTitle className="text-base">Cuotas en mora</CardTitle>
             </CardHeader>
             <CardContent>
-              <OverdueInstallmentsTable installments={data.overdueInstallments} />
+              <OverdueInstallmentsTable
+                installments={data.overdueInstallments}
+                accounts={data.personalAccounts}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -152,7 +155,10 @@ export function BusinessDashboard({ data }: BusinessDashboardProps) {
               <CardTitle className="text-base">Cuentas por cobrar</CardTitle>
             </CardHeader>
             <CardContent>
-              <ReceivablesList installments={data.pendingInstallments} />
+              <ReceivablesList
+                installments={data.pendingInstallments}
+                accounts={data.personalAccounts}
+              />
             </CardContent>
           </Card>
         </TabsContent>

@@ -15,7 +15,7 @@ import { postInventoryPurchase } from "@/domain/business/purchase.service";
 import {
   createBusinessSale,
   deleteBusinessSale,
-  registerInstallmentPayment,
+  processInstallmentPayment,
   type InstallmentPlanItem,
   type SaleLineInput,
 } from "@/domain/business/sale.service";
@@ -448,30 +448,67 @@ export async function deleteSaleAction(saleId: string) {
   revalidateBusiness(sale.business.slug);
 }
 
+export async function processInstallmentPaymentAction(data: {
+  installmentId: string;
+  amount: number;
+  destinationAccountId: string;
+  paymentDate: string;
+  notes?: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const userId = await getDefaultUserId();
+    const installment = await prisma.saleInstallment.findUniqueOrThrow({
+      where: { id: data.installmentId },
+      include: { sale: { include: { business: true } } },
+    });
+
+    if (installment.sale.business.userId !== userId) {
+      return { ok: false, error: "No autorizado" };
+    }
+
+    if (data.amount <= 0) {
+      return { ok: false, error: "El abono debe ser mayor a cero" };
+    }
+
+    if (!data.destinationAccountId?.trim()) {
+      return { ok: false, error: "Selecciona la cuenta destino del cobro" };
+    }
+
+    await processInstallmentPayment({
+      installmentId: data.installmentId,
+      amount: data.amount,
+      paymentDate: new Date(data.paymentDate),
+      destinationAccountId: data.destinationAccountId,
+      userId,
+      notes: data.notes,
+    });
+
+    revalidateBusiness(installment.sale.business.slug);
+    revalidatePath("/accounts");
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "No se pudo registrar el abono",
+    };
+  }
+}
+
+/** @deprecated Usar processInstallmentPaymentAction */
 export async function payInstallmentAction(data: {
   installmentId: string;
   amount: number;
   paymentDate: string;
   notes?: string;
 }) {
-  const userId = await getDefaultUserId();
-  const installment = await prisma.saleInstallment.findUniqueOrThrow({
-    where: { id: data.installmentId },
-    include: { sale: { include: { business: true } } },
-  });
-
-  if (installment.sale.business.userId !== userId) {
-    throw new Error("No autorizado");
-  }
-
-  await registerInstallmentPayment({
+  const result = await processInstallmentPaymentAction({
     installmentId: data.installmentId,
     amount: data.amount,
-    paymentDate: new Date(data.paymentDate),
+    destinationAccountId: "BUSINESS_CASH",
+    paymentDate: data.paymentDate,
     notes: data.notes,
   });
-
-  revalidateBusiness(installment.sale.business.slug);
+  if (!result.ok) throw new Error(result.error);
 }
 
 export async function recordCapitalTransfer(data: {
