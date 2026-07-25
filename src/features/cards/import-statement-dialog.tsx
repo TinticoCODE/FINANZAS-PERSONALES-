@@ -149,47 +149,7 @@ export function ImportStatementDialog({
 
     let payload: unknown;
     try {
-      // #region agent log
       const trimmed = jsonText.trim();
-      const parseProbe = (() => {
-        try {
-          JSON.parse(trimmed);
-          return { ok: true as const };
-        } catch (e) {
-          return {
-            ok: false as const,
-            error: e instanceof Error ? e.message : String(e),
-          };
-        }
-      })();
-      fetch("http://127.0.0.1:7484/ingest/b4fbe1ef-87c2-4a20-904f-a2a9b5b9695b", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "f5c98c",
-        },
-        body: JSON.stringify({
-          sessionId: "f5c98c",
-          runId: "pre-fix",
-          hypothesisId: "A-E",
-          location: "import-statement-dialog.tsx:handleSubmit",
-          message: "JSON parse attempt",
-          data: {
-            length: jsonText.length,
-            trimmedLength: trimmed.length,
-            startsWithBrace: trimmed.startsWith("{"),
-            startsWithBracket: trimmed.startsWith("["),
-            looksLikePdf: looksLikePdfText(trimmed),
-            hasColombianAmount: /\$\d{1,3}(\.\d{3})+,\d{2}/.test(trimmed),
-            first120: trimmed.slice(0, 120),
-            last80: trimmed.slice(-80),
-            parseOk: parseProbe.ok,
-            parseError: parseProbe.ok ? null : parseProbe.error,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
 
       if (looksLikePdfText(trimmed)) {
         setError(
@@ -199,27 +159,7 @@ export function ImportStatementDialog({
       }
 
       payload = JSON.parse(jsonText);
-    } catch (parseErr) {
-      // #region agent log
-      fetch("http://127.0.0.1:7484/ingest/b4fbe1ef-87c2-4a20-904f-a2a9b5b9695b", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "f5c98c",
-        },
-        body: JSON.stringify({
-          sessionId: "f5c98c",
-          runId: "pre-fix",
-          hypothesisId: "A-E",
-          location: "import-statement-dialog.tsx:handleSubmit:catch",
-          message: "JSON parse failed — user-facing error shown",
-          data: {
-            error: parseErr instanceof Error ? parseErr.message : String(parseErr),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
+    } catch {
       setError(
         "El JSON no es válido. Revisa comas, comillas y llaves, o importa el PDF directamente."
       );
