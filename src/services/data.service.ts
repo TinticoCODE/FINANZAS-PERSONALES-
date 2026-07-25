@@ -22,8 +22,10 @@ import {
 import {
   computeAvailableCash,
   computeNetWorth,
+  isSpendingExpense,
   mtdRangeUtc,
   previousMtdRangeUtc,
+  spendingExpenseWhere,
 } from "@/domain/dashboard/dashboard-metrics";
 import { computeLoansSummary } from "@/domain/loans/loan-calculations";
 import {
@@ -37,6 +39,10 @@ import {
   calculatePaymentToAvoidInterest,
   type CreditCardPurchase,
 } from "@/services/credit-card.service";
+import {
+  calculateCardProjectedDebt,
+  type ProjectedDebtTransaction,
+} from "@/domain/credit/debt-projection.service";
 import type {
   ChartDataPoint,
   CreditCardData,
@@ -67,19 +73,25 @@ async function enrichCreditCardsWithPayments(
       date: true,
       amount: true,
       installments: true,
+      currentInstallment: true,
       isInstallments: true,
       installmentAmount: true,
       hasZeroInterest: true,
+      tags: true,
     },
   });
 
   const purchasesByCard = new Map<string, CreditCardPurchase[]>();
+  const projectedInputsByCard = new Map<string, ProjectedDebtTransaction[]>();
+
   for (const tx of purchases) {
     if (!tx.creditCardId) continue;
+
+    const amount = toNumber(tx.amount);
     const list = purchasesByCard.get(tx.creditCardId) ?? [];
     list.push({
       date: tx.date,
-      amount: toNumber(tx.amount),
+      amount,
       installments: tx.installments ?? 1,
       isInstallments: tx.isInstallments,
       installmentAmount: tx.installmentAmount
@@ -88,6 +100,31 @@ async function enrichCreditCardsWithPayments(
       hasZeroInterest: tx.hasZeroInterest,
     });
     purchasesByCard.set(tx.creditCardId, list);
+
+    const importTag = tx.tags.find((tag) => tag.startsWith("statement-import:"));
+    const statementCycleEnd = importTag
+      ? (() => {
+          const end = importTag.split(":")[2];
+          if (!end) return undefined;
+          const [y, m, d] = end.split("-").map(Number);
+          const cycleEnd = new Date(y, m - 1, d, 23, 59, 59, 999);
+          return cycleEnd;
+        })()
+      : undefined;
+
+    const projectedList = projectedInputsByCard.get(tx.creditCardId) ?? [];
+    projectedList.push({
+      date: tx.date,
+      amount,
+      installments: tx.installments ?? 1,
+      currentInstallment: tx.currentInstallment ?? 1,
+      installmentAmount: tx.installmentAmount
+        ? toNumber(tx.installmentAmount)
+        : undefined,
+      hasZeroInterest: tx.hasZeroInterest,
+      statementCycleEnd,
+    });
+    projectedInputsByCard.set(tx.creditCardId, projectedList);
   }
 
   return cards.map((card) => {
@@ -104,6 +141,17 @@ async function enrichCreditCardsWithPayments(
       referenceLocal
     );
 
+    const projected = calculateCardProjectedDebt(
+      projectedInputsByCard.get(card.id) ?? [],
+      toNumber(card.usedBalance),
+      {
+        cutOffDate: card.cutOffDate,
+        paymentDueDate: card.paymentDueDate,
+        interestRate: toNumber(card.interestRate),
+      },
+      referenceLocal
+    );
+
     return {
       ...mapped,
       paymentToAvoidInterest: payment.total,
@@ -111,6 +159,9 @@ async function enrichCreditCardsWithPayments(
       deferredInstallmentsDue: payment.deferredInstallmentsDue,
       msiInstallmentsDue: payment.msiInstallmentsDue,
       minPayment: Math.max(mapped.usedBalance * 0.05, 0),
+      projectedRemainingDebt: projected.projectedRemainingDebt,
+      projectedPaymentDueThisCycle: projected.projectedPaymentDueThisCycle,
+      storedUsedBalance: projected.storedUsedBalance,
     };
   });
 }
@@ -315,11 +366,10 @@ export async function getDashboardData() {
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
-      where: {
+      where: spendingExpenseWhere({
         userId,
-        type: "EXPENSE",
         date: { gte: mtdRange.start, lte: mtdRange.end },
-      },
+      }),
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
@@ -331,25 +381,26 @@ export async function getDashboardData() {
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
-      where: {
+      where: spendingExpenseWhere({
         userId,
-        type: "EXPENSE",
         date: { gte: prevMtdRange.start, lte: prevMtdRange.end },
-      },
+      }),
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
-      where: {
+      where: spendingExpenseWhere({
         userId,
-        type: "EXPENSE",
         paymentMethod: "CREDIT",
         date: { gte: mtdRange.start, lte: mtdRange.end },
-      },
+      }),
       _sum: { amount: true },
     }),
     prisma.transaction.groupBy({
       by: ["categoryId"],
-      where: { userId, type: "EXPENSE", date: { gte: start, lte: end } },
+      where: spendingExpenseWhere({
+        userId,
+        date: { gte: mtdRange.start, lte: mtdRange.end },
+      }),
       _sum: { amount: true },
     }),
     prisma.transaction.findMany({
@@ -360,7 +411,7 @@ export async function getDashboardData() {
           lte: end,
         },
       },
-      select: { type: true, amount: true, date: true },
+      select: { type: true, amount: true, date: true, tags: true },
     }),
     prisma.transaction.findMany({
       where: {
@@ -370,7 +421,7 @@ export async function getDashboardData() {
           lte: end,
         },
       },
-      select: { type: true, amount: true, date: true },
+      select: { type: true, amount: true, date: true, tags: true },
     }),
   ]);
 
@@ -379,7 +430,12 @@ export async function getDashboardData() {
     (sum, loan) => sum + toNumber(loan.outstandingBalance),
     0
   );
-  const totalDebt = cards.reduce((sum, c) => sum + toNumber(c.usedBalance), 0);
+  const enrichedCards = await enrichCreditCardsWithPayments(cards, timezone);
+  const totalDebt = enrichedCards.reduce(
+    (sum, c) => sum + (c.projectedRemainingDebt ?? c.usedBalance),
+    0
+  );
+  const storedCardDebt = enrichedCards.reduce((sum, c) => sum + c.usedBalance, 0);
   const budgetReserved = budgets.reduce((sum, b) => sum + b.budget, 0);
 
   const { netWorth } = computeNetWorth(
@@ -455,9 +511,9 @@ export async function getDashboardData() {
     },
     {
       id: "debt",
-      title: "Deuda total",
+      title: "Deuda proyectada",
       value: totalDebt,
-      previousValue: Math.max(totalDebt - mtdCreditExpenses, 0),
+      previousValue: Math.max(storedCardDebt - mtdCreditExpenses, 0),
       icon: "credit-card",
       color: "#f59e0b",
       gradient: "from-amber-500/10 to-yellow-500/5",
@@ -500,7 +556,7 @@ export async function getDashboardData() {
       .filter((tx) => tx.type === "INCOME")
       .reduce((sum, tx) => sum + toNumber(tx.amount), 0);
     const exp = txInMonth
-      .filter((tx) => tx.type === "EXPENSE")
+      .filter(isSpendingExpense)
       .reduce((sum, tx) => sum + toNumber(tx.amount), 0);
     monthlyEvolution.push({
       month: monthNames[m],
@@ -527,7 +583,7 @@ export async function getDashboardData() {
       .filter((tx) => tx.type === "INCOME")
       .reduce((sum, tx) => sum + toNumber(tx.amount), 0);
     const outflow = dayTx
-      .filter((tx) => tx.type === "EXPENSE")
+      .filter(isSpendingExpense)
       .reduce((sum, tx) => sum + toNumber(tx.amount), 0);
     return {
       day: dayNames[date.getDay()],
@@ -543,8 +599,6 @@ export async function getDashboardData() {
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true },
   });
-
-  const enrichedCards = await enrichCreditCardsWithPayments(cards, timezone);
 
   return {
     stats,

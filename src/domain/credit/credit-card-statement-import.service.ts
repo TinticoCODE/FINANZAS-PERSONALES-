@@ -100,6 +100,7 @@ function resolveInstallmentFields(line: StatementExpenseLineInput) {
 
   return {
     installments: totalInstallments,
+    currentInstallment: line.currentInstallment,
     isInstallments,
     hasZeroInterest,
     installmentAmount: isInstallments ? line.amount : null,
@@ -132,6 +133,7 @@ async function importExpenseLine(
       description: buildExpenseDescription(params.line),
       paymentMethod: "CREDIT",
       installments: installmentFields.installments,
+      currentInstallment: installmentFields.currentInstallment,
       isInstallments: installmentFields.isInstallments,
       hasZeroInterest: installmentFields.hasZeroInterest,
       installmentAmount: installmentFields.installmentAmount,
@@ -178,7 +180,7 @@ async function importPaymentLine(
       creditCardId: params.creditCardId,
       accountId: null,
       categoryId: params.categoryId,
-      type: "EXPENSE",
+      type: "PAYMENT_TO_CARD",
       amount: params.line.amount,
       description: params.line.description,
       paymentMethod: "TRANSFER",

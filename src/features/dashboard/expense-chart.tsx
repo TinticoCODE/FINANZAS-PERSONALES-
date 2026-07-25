@@ -89,7 +89,7 @@ export function ExpenseByCategoryChart({ data }: ExpenseChartProps) {
       <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-base font-semibold">Gastos por categoría</CardTitle>
-          <CardDescription>Distribución del mes actual</CardDescription>
+          <CardDescription>Distribución MTD (día 1 al hoy)</CardDescription>
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (

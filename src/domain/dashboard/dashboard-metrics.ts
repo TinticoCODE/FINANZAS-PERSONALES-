@@ -1,9 +1,39 @@
+import type { Prisma } from "@prisma/client";
 import { fromZonedTime } from "date-fns-tz";
 import {
   localMidnightToUtc,
   previousLocalMonth,
   type LocalYmd,
 } from "@/domain/billing/timezone";
+
+/** Tags de pagos a tarjeta: no son gasto de consumo. */
+export const SPENDING_EXPENSE_TAG_EXCLUSIONS = [
+  "card-payment",
+  "card-payment-source",
+] as const;
+
+/** Filtro Prisma: gastos personales excluyendo abonos a tarjeta. */
+export function spendingExpenseWhere(
+  extra?: Prisma.TransactionWhereInput
+): Prisma.TransactionWhereInput {
+  return {
+    ...extra,
+    type: "EXPENSE",
+    NOT: {
+      tags: { hasSome: [...SPENDING_EXPENSE_TAG_EXCLUSIONS] },
+    },
+  };
+}
+
+export function isSpendingExpense(tx: {
+  type: string;
+  tags?: string[];
+}): boolean {
+  if (tx.type !== "EXPENSE") return false;
+  return !tx.tags?.some((tag) =>
+    (SPENDING_EXPENSE_TAG_EXCLUSIONS as readonly string[]).includes(tag)
+  );
+}
 
 /** Rango del mes en curso en UTC: día 1 del mes hasta `endDay` (inclusivo) en la zona horaria del usuario. mes = 1–12. */
 export function mtdRangeUtc(

@@ -7,7 +7,7 @@ import {
   monthRangeUtc,
   previousLocalMonth,
 } from "@/domain/billing/timezone";
-import { computeNetWorth } from "@/domain/dashboard/dashboard-metrics";
+import { computeNetWorth, spendingExpenseWhere } from "@/domain/dashboard/dashboard-metrics";
 
 export type MonthlySnapshotDTO = {
   id?: string;
@@ -120,11 +120,10 @@ export async function computeLiveMonthlySnapshot(
       _sum: { amount: true },
     }),
     prisma.transaction.aggregate({
-      where: {
+      where: spendingExpenseWhere({
         userId,
-        type: "EXPENSE",
         date: { gte: start, lte: rangeEnd },
-      },
+      }),
       _sum: { amount: true },
     }),
   ]);
@@ -331,11 +330,10 @@ export async function getExpenseByCategoryForMonth(
   const [expenseGroups, categories] = await Promise.all([
     prisma.transaction.groupBy({
       by: ["categoryId"],
-      where: {
+      where: spendingExpenseWhere({
         userId,
-        type: "EXPENSE",
         date: { gte: start, lte: rangeEnd },
-      },
+      }),
       _sum: { amount: true },
     }),
     prisma.category.findMany({
