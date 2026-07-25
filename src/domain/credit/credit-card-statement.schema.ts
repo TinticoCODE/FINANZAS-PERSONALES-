@@ -35,6 +35,7 @@ export const creditCardStatementImportSchema = z
     minPaymentDue: z.coerce.number().nonnegative(),
     interestCharged: z.coerce.number().nonnegative().default(0),
     importSource: z.string().default("RappiCard"),
+    sourceFileHash: z.string().optional(),
     expenseCategoryId: z.string().optional(),
     paymentCategoryId: z.string().optional(),
     lines: z.array(creditCardStatementLineSchema).min(1, "El extracto no tiene movimientos"),
@@ -66,6 +67,7 @@ export type CreditCardStatementImportResult =
       ok: true;
       statementId: string;
       importedCount: number;
+      skippedCount: number;
       expenseCount: number;
       paymentCount: number;
       usedBalanceAtClose: number;

@@ -21,7 +21,7 @@ import {
   type CreditCardStatementImportResult,
 } from "@/domain/credit/credit-card-statement.schema";
 import { importCreditCardStatementData } from "@/domain/credit/credit-card-statement-import.service";
-import { parseRappiCardPdfBuffer } from "@/domain/credit/rappicard-pdf-parser";
+import { processCreditCardStatementPdf } from "@/domain/credit/credit-card-statement-pdf.service";
 import {
   computeInstallmentAmount,
   isMsiTerm,
@@ -978,6 +978,7 @@ export async function importCreditCardStatementPdf(
 ): Promise<CreditCardStatementImportResult> {
   const creditCardId = formData.get("creditCardId");
   const file = formData.get("pdf");
+  const password = formData.get("password");
 
   if (typeof creditCardId !== "string" || !creditCardId) {
     return { ok: false, error: "Selecciona la tarjeta de crédito" };
@@ -993,27 +994,17 @@ export async function importCreditCardStatementPdf(
 
   try {
     const buffer = Buffer.from(await file.arrayBuffer());
-    const parsed = await parseRappiCardPdfBuffer(buffer, creditCardId);
-    const validation = parseCreditCardStatementImport(parsed);
+    const result = await processCreditCardStatementPdf({
+      creditCardId,
+      buffer,
+      password: typeof password === "string" && password ? password : undefined,
+    });
 
-    if (!validation.success) {
-      return {
-        ok: false,
-        error: validation.error,
-        fieldErrors: validation.fieldErrors,
-      };
+    if (result.ok) {
+      revalidateAll();
     }
 
-    const userId = await getDefaultUserId();
-    const timezone = await getUserTimezone();
-    const result = await importCreditCardStatementData(
-      userId,
-      timezone,
-      validation.data
-    );
-
-    revalidateAll();
-    return { ok: true, ...result };
+    return result;
   } catch (err) {
     console.error("importCreditCardStatementPdf failed:", err);
     return {

@@ -1,4 +1,5 @@
 import type { CreditCardStatementImportInput } from "@/domain/credit/credit-card-statement.schema";
+import { extractPdfText } from "@/domain/credit/pdf/pdf-text-extractor";
 
 const MONTHS: Record<string, string> = {
   ene: "01",
@@ -15,14 +16,28 @@ const MONTHS: Record<string, string> = {
   dic: "12",
 };
 
+/** Filas Mercado Pago multilínea del extracto RappiCard/Davivienda. */
 const MERCADO_ROW =
-  /Virtual(\d{4}-\d{2}-\d{2})\nMERCADO \nPAGO\*([A-Z0-9]+)\n\$([\d.,]+)([^\n]*)/g;
+  /Virtual(\d{4}-\d{2}-\d{2})\nMERCADO\s*\nPAGO\*([A-Z0-9]+)\n+\$([\d.,]+)([\s\S]*?)(?=\nVirtual|-\d{4}|Gastos de cobranza|$)/g;
+
+/** Filas compactas: Virtual + fecha + comercio + monto transacción. */
 const COMPACT_ROW =
-  /Virtual(\d{4}-\d{2}-\d{2})([^$\n]+)\$([\d.,]+)([^\n]*)/g;
+  /Virtual(\d{4}-\d{2}-\d{2})([^$\n]+)\$([\d.,]+)([\s\S]*?)(?=\nVirtual|-\d{4}|Gastos de cobranza|$)/g;
+
+/** Abono / pago a tarjeta (monto negativo en extracto). */
 const PAYMENT_ROW =
   /-(\d{4}-\d{2}-\d{2})PAGOS RAPPIPAY APP\$-([\d.,]+)/g;
-const INSTALLMENT_TAIL = /(\d) de (\d{1,2})\$/;
-const EA_TAIL = /([\d.,]+)%\s*$/;
+
+const INSTALLMENT_IN_TAIL = /(\d) de (\d{1,2})/;
+const EA_IN_TAIL = /([\d.,]+)\s*%/g;
+
+const PERIOD_REGEX =
+  /(\d{1,2})\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\s+(\d{4})/gi;
+
+const MIN_PAYMENT_REGEX = /Pago\s+m[ií]nimo\s*\$?\s*([\d.,]+)/i;
+const TOTAL_PAYMENT_REGEX = /Pago\s+total\s*\$?\s*([\d.,]+)/gi;
+const INTEREST_REGEX =
+  /Intereses\s+corrientes(?:\s+del\s+mes)?\s*\n?\s*\$?\s*([\d.,]+)/i;
 
 export function parseColombianAmount(raw: string): number {
   const normalized = raw
@@ -44,11 +59,7 @@ function parsePeriodDate(match: RegExpMatchArray): string {
 }
 
 function extractPeriod(text: string) {
-  const matches = [
-    ...text.matchAll(
-      /(\d{1,2})\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\s+(\d{4})/gi
-    ),
-  ];
+  const matches = [...text.matchAll(PERIOD_REGEX)];
   if (matches.length < 2) {
     throw new Error("No se encontró el periodo facturado en el PDF");
   }
@@ -60,19 +71,21 @@ function extractPeriod(text: string) {
 }
 
 function extractSummaryAmounts(text: string) {
-  const minPaymentMatch = text.match(/\b339\.616,84\b/);
-  const totalPaymentMatch = text.match(/\b934\.942,18\b/);
-  const interestMatch =
-    text.match(/Intereses corrientes del mes\s*\n\s*\$([\d.,]+)/i) ??
-    text.match(/\+\s*Intereses corrientes\s*\n\s*\$([\d.,]+)/i);
+  const minPaymentMatch = text.match(MIN_PAYMENT_REGEX);
+  const totalPaymentMatches = [...text.matchAll(TOTAL_PAYMENT_REGEX)];
+  const interestMatch = text.match(INTEREST_REGEX);
 
-  if (!minPaymentMatch || !totalPaymentMatch) {
+  if (!minPaymentMatch || totalPaymentMatches.length === 0) {
     throw new Error("No se encontraron los montos de pago mínimo/total en el PDF");
   }
 
+  const totalPaymentDue = parseColombianAmount(
+    totalPaymentMatches[totalPaymentMatches.length - 1][1]
+  );
+
   return {
-    totalPaymentDue: parseColombianAmount(totalPaymentMatch[0]),
-    minPaymentDue: parseColombianAmount(minPaymentMatch[0]),
+    totalPaymentDue,
+    minPaymentDue: parseColombianAmount(minPaymentMatch[1]),
     interestCharged: interestMatch
       ? parseColombianAmount(interestMatch[1])
       : 0,
@@ -105,16 +118,33 @@ function normalizeDescription(raw: string): string {
 }
 
 function parseInstallmentTail(tail: string) {
-  const installmentMatch = tail.match(INSTALLMENT_TAIL);
-  const eaMatch = tail.match(EA_TAIL);
+  const installmentMatch = tail.match(INSTALLMENT_IN_TAIL);
+  const eaMatches = [...tail.matchAll(EA_IN_TAIL)];
+  const eaRate =
+    eaMatches.length > 0
+      ? Number(eaMatches[eaMatches.length - 1][1].replace(",", "."))
+      : 0;
+
   return {
     currentInstallment: installmentMatch ? Number(installmentMatch[1]) : 1,
     totalInstallments: installmentMatch ? Number(installmentMatch[2]) : 1,
-    eaRate: eaMatch ? Number(eaMatch[1].replace(",", ".")) : 0,
+    eaRate,
   };
 }
 
-function extractTransactions(text: string): ParsedLine[] {
+/** Clasifica monto: negativo en PDF = abono; positivo = cargo. */
+export function classifyStatementAmount(rawAmount: string): {
+  amount: number;
+  type: "EXPENSE" | "PAYMENT_TO_CARD";
+} {
+  const isPayment = rawAmount.includes("-") || /\$\-/.test(rawAmount);
+  return {
+    amount: parseColombianAmount(rawAmount),
+    type: isPayment ? "PAYMENT_TO_CARD" : "EXPENSE",
+  };
+}
+
+export function extractStatementTransactions(text: string): ParsedLine[] {
   const start = text.indexOf("Detalle de transacciones");
   const end = text.indexOf("Gastos de cobranza");
   const section =
@@ -177,13 +207,13 @@ function extractTransactions(text: string): ParsedLine[] {
   return lines;
 }
 
-export function parseRappiCardPdfText(
+export function parseRappiCardStatementText(
   text: string,
   creditCardId: string
 ): CreditCardStatementImportInput {
   const period = extractPeriod(text);
   const summary = extractSummaryAmounts(text);
-  const lines = extractTransactions(text);
+  const lines = extractStatementTransactions(text);
 
   return {
     creditCardId,
@@ -197,13 +227,26 @@ export function parseRappiCardPdfText(
   };
 }
 
+export async function parseRappiCardStatementPdf(
+  buffer: Buffer,
+  creditCardId: string,
+  options?: { password?: string }
+): Promise<CreditCardStatementImportInput & { fileHash: string }> {
+  const extracted = await extractPdfText(buffer, { password: options?.password });
+  const parsed = parseRappiCardStatementText(extracted.text, creditCardId);
+  return { ...parsed, fileHash: extracted.fileHash };
+}
+
+/** @deprecated Usar parseRappiCardStatementPdf */
+export const parseRappiCardPdfText = parseRappiCardStatementText;
+
+/** @deprecated Usar parseRappiCardStatementPdf */
 export async function parseRappiCardPdfBuffer(
   buffer: Buffer,
-  creditCardId: string
-): Promise<CreditCardStatementImportInput> {
-  const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default as (
-    data: Buffer
-  ) => Promise<{ text: string }>;
-  const parsed = await pdfParse(buffer);
-  return parseRappiCardPdfText(parsed.text, creditCardId);
+  creditCardId: string,
+  options?: { password?: string }
+) {
+  const result = await parseRappiCardStatementPdf(buffer, creditCardId, options);
+  const { fileHash: _fileHash, ...payload } = result;
+  return payload;
 }

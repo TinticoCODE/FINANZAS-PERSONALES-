@@ -226,11 +226,13 @@ model CreditCardStatement {
   minPaymentDue      Decimal? @db.Decimal(12, 2)
   interestCharged    Decimal? @db.Decimal(12, 2)
   importSource       String?
+  sourceFileHash     String?
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   creditCard CreditCard @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
 
   @@unique([creditCardId, cycleEnd])
+  @@unique([creditCardId, sourceFileHash])
   @@index([userId, closedAt])
 }
 

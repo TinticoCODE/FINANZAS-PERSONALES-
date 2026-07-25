@@ -58,6 +58,7 @@ export function ImportStatementDialog({
   const [creditCardId, setCreditCardId] = useState("");
   const [jsonText, setJsonText] = useState("");
   const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [pdfPassword, setPdfPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -68,6 +69,7 @@ export function ImportStatementDialog({
     setError(null);
     setSuccess(null);
     setPdfFileName(null);
+    setPdfPassword("");
     if (cards.length === 1) {
       setCreditCardId(cards[0].id);
     }
@@ -85,6 +87,7 @@ export function ImportStatementDialog({
       setSuccess(null);
       setJsonText("");
       setPdfFileName(null);
+    setPdfPassword("");
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -127,6 +130,9 @@ export function ImportStatementDialog({
     const formData = new FormData();
     formData.append("creditCardId", creditCardId);
     formData.append("pdf", file);
+    if (pdfPassword.trim()) {
+      formData.append("password", pdfPassword.trim());
+    }
 
     startTransition(async () => {
       const result = await importCreditCardStatementPdf(formData);
@@ -135,8 +141,13 @@ export function ImportStatementDialog({
         return;
       }
 
+      const skipped =
+        result.skippedCount > 0
+          ? ` (${result.skippedCount} duplicadas omitidas)`
+          : "";
+
       setSuccess(
-        `Importados ${result.importedCount} movimientos (${result.expenseCount} consumos, ${result.paymentCount} pagos). Saldo al cierre: ${formatCurrency(result.usedBalanceAtClose)}.`
+        `Importados ${result.importedCount} movimientos (${result.expenseCount} consumos, ${result.paymentCount} pagos)${skipped}. Saldo al cierre: ${formatCurrency(result.usedBalanceAtClose)}.`
       );
       router.refresh();
     });
@@ -236,6 +247,19 @@ export function ImportStatementDialog({
               >
                 {pending ? "Importando..." : "Importar PDF"}
               </Button>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="import-pdf-password">
+                Contraseña del PDF (opcional)
+              </Label>
+              <Input
+                id="import-pdf-password"
+                type="password"
+                value={pdfPassword}
+                onChange={(event) => setPdfPassword(event.target.value)}
+                placeholder="Solo si el extracto está protegido"
+                autoComplete="off"
+              />
             </div>
             {pdfFileName && (
               <p className="text-xs text-muted-foreground">Archivo: {pdfFileName}</p>

@@ -3,6 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
 import { localMidnightToUtc } from "@/domain/billing/timezone";
 import { isMsiTerm } from "@/domain/credit/msi.constants";
+import {
+  computeStatementLineHash,
+  pdfFileHashTag,
+  statementLineHashTag,
+} from "@/domain/credit/pdf/statement-line-hash";
 import type {
   CreditCardStatementImportInput,
   CreditCardStatementLineInput,
@@ -18,6 +23,15 @@ function parseStatementDate(dateStr: string, timezone: string): Date {
 
 function periodTag(periodStart: string, periodEnd: string): string {
   return `statement-import:${periodStart}:${periodEnd}`;
+}
+
+function lineDedupKey(line: CreditCardStatementLineInput): string {
+  return computeStatementLineHash({
+    date: line.date,
+    description: line.description,
+    amount: line.amount,
+    type: line.type,
+  });
 }
 
 async function ensureCategory(
@@ -67,9 +81,11 @@ async function importExpenseLine(
     categoryId: string;
     timezone: string;
     importTag: string;
+    lineHash: string;
   }
 ) {
   const installmentFields = resolveInstallmentFields(params.line);
+  const hashTag = statementLineHashTag(params.lineHash);
 
   await tx.transaction.create({
     data: {
@@ -85,7 +101,7 @@ async function importExpenseLine(
       isInstallments: installmentFields.isInstallments,
       hasZeroInterest: installmentFields.hasZeroInterest,
       installmentAmount: installmentFields.installmentAmount,
-      tags: [params.importTag, "card-expense"],
+      tags: [params.importTag, "card-expense", hashTag],
       date: parseStatementDate(params.line.date, params.timezone),
     },
   });
@@ -105,6 +121,7 @@ async function importPaymentLine(
     categoryId: string;
     timezone: string;
     importTag: string;
+    lineHash: string;
   }
 ) {
   const card = await tx.creditCard.findUniqueOrThrow({
@@ -119,6 +136,8 @@ async function importPaymentLine(
     );
   }
 
+  const hashTag = statementLineHashTag(params.lineHash);
+
   await tx.transaction.create({
     data: {
       userId: params.userId,
@@ -132,7 +151,7 @@ async function importPaymentLine(
       installments: 1,
       isInstallments: false,
       hasZeroInterest: false,
-      tags: [params.importTag, "card-payment"],
+      tags: [params.importTag, "card-payment", hashTag],
       date: parseStatementDate(params.line.date, params.timezone),
     },
   });
@@ -141,6 +160,27 @@ async function importPaymentLine(
     where: { id: params.creditCardId },
     data: { usedBalance: { decrement: params.line.amount } },
   });
+}
+
+async function loadExistingLineHashes(
+  tx: DbTx,
+  userId: string,
+  creditCardId: string
+): Promise<Set<string>> {
+  const existing = await tx.transaction.findMany({
+    where: { userId, creditCardId },
+    select: { tags: true },
+  });
+
+  const hashes = new Set<string>();
+  for (const row of existing) {
+    for (const tag of row.tags) {
+      if (tag.startsWith("import-hash:")) {
+        hashes.add(tag.slice("import-hash:".length));
+      }
+    }
+  }
+  return hashes;
 }
 
 export async function importCreditCardStatementData(
@@ -160,6 +200,19 @@ export async function importCreditCardStatementData(
       throw new Error("Tarjeta de crédito no encontrada");
     }
 
+    if (input.sourceFileHash) {
+      const duplicatePdf = await tx.creditCardStatement.findFirst({
+        where: {
+          creditCardId: input.creditCardId,
+          sourceFileHash: input.sourceFileHash,
+        },
+        select: { id: true },
+      });
+      if (duplicatePdf) {
+        throw new Error("Este archivo PDF ya fue importado anteriormente");
+      }
+    }
+
     const existingStatement = await tx.creditCardStatement.findUnique({
       where: {
         creditCardId_cycleEnd: {
@@ -168,22 +221,26 @@ export async function importCreditCardStatementData(
         },
       },
     });
-    if (existingStatement) {
-      throw new Error(
-        "Este extracto ya fue importado para el periodo indicado"
-      );
-    }
 
-    const duplicateImport = await tx.transaction.findFirst({
-      where: {
-        userId,
-        creditCardId: input.creditCardId,
-        tags: { has: importTag },
-      },
-      select: { id: true },
+    const existingLineHashes = await loadExistingLineHashes(
+      tx,
+      userId,
+      input.creditCardId
+    );
+
+    const linesToImport = input.lines.filter((line) => {
+      const hash = lineDedupKey(line);
+      return !existingLineHashes.has(hash);
     });
-    if (duplicateImport) {
-      throw new Error("Ya existen movimientos importados para este periodo");
+
+    const skippedCount = input.lines.length - linesToImport.length;
+
+    if (linesToImport.length === 0) {
+      throw new Error(
+        existingStatement
+          ? "Todas las transacciones de este extracto ya existen en la base de datos"
+          : "No hay transacciones nuevas para importar"
+      );
     }
 
     const expenseCategoryId =
@@ -197,7 +254,9 @@ export async function importCreditCardStatementData(
     let expenseCount = 0;
     let paymentCount = 0;
 
-    for (const line of input.lines) {
+    for (const line of linesToImport) {
+      const lineHash = lineDedupKey(line);
+
       if (line.type === "EXPENSE") {
         await importExpenseLine(tx, {
           userId,
@@ -206,6 +265,7 @@ export async function importCreditCardStatementData(
           categoryId: line.categoryId ?? expenseCategoryId,
           timezone,
           importTag,
+          lineHash,
         });
         expenseCount++;
         continue;
@@ -218,6 +278,7 @@ export async function importCreditCardStatementData(
         categoryId: line.categoryId ?? paymentCategoryId,
         timezone,
         importTag,
+        lineHash,
       });
       paymentCount++;
     }
@@ -227,26 +288,48 @@ export async function importCreditCardStatementData(
       select: { usedBalance: true },
     });
 
-    const statement = await tx.creditCardStatement.create({
-      data: {
-        userId,
-        creditCardId: input.creditCardId,
-        cycleStart,
-        cycleEnd,
-        usedBalanceAtClose: updatedCard.usedBalance,
-        totalPaymentDue: input.totalPaymentDue,
-        minPaymentDue: input.minPaymentDue,
-        interestCharged: input.interestCharged,
-        importSource: input.importSource,
-      },
-    });
+    let statementId: string;
+
+    if (existingStatement) {
+      const updated = await tx.creditCardStatement.update({
+        where: { id: existingStatement.id },
+        data: {
+          usedBalanceAtClose: updatedCard.usedBalance,
+          totalPaymentDue: input.totalPaymentDue,
+          minPaymentDue: input.minPaymentDue,
+          interestCharged: input.interestCharged,
+          importSource: input.importSource,
+          sourceFileHash: input.sourceFileHash ?? existingStatement.sourceFileHash,
+        },
+      });
+      statementId = updated.id;
+    } else {
+      const created = await tx.creditCardStatement.create({
+        data: {
+          userId,
+          creditCardId: input.creditCardId,
+          cycleStart,
+          cycleEnd,
+          usedBalanceAtClose: updatedCard.usedBalance,
+          totalPaymentDue: input.totalPaymentDue,
+          minPaymentDue: input.minPaymentDue,
+          interestCharged: input.interestCharged,
+          importSource: input.importSource,
+          sourceFileHash: input.sourceFileHash,
+        },
+      });
+      statementId = created.id;
+    }
 
     return {
-      statementId: statement.id,
-      importedCount: input.lines.length,
+      statementId,
+      importedCount: linesToImport.length,
+      skippedCount,
       expenseCount,
       paymentCount,
       usedBalanceAtClose: toNumber(updatedCard.usedBalance),
     };
   });
 }
+
+export { pdfFileHashTag, statementLineHashTag, computeStatementLineHash };
