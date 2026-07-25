@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { FileUp } from "lucide-react";
-import { importCreditCardStatement } from "@/actions/finance.actions";
+import {
+  importCreditCardStatement,
+  importCreditCardStatementPdf,
+} from "@/actions/finance.actions";
 import { RAPPICARD_JUN_JUL_2026_SAMPLE } from "@/domain/credit/credit-card-statement.schema";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -37,15 +41,23 @@ function buildTemplatePayload(creditCardId: string) {
   };
 }
 
+function looksLikePdfText(value: string): boolean {
+  return /extracto de tarjeta|davivienda|rappicard|detalle de transacciones/i.test(
+    value
+  );
+}
+
 export function ImportStatementDialog({
   cards,
   open,
   onOpenChange,
 }: ImportStatementDialogProps) {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
   const [creditCardId, setCreditCardId] = useState("");
   const [jsonText, setJsonText] = useState("");
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -55,6 +67,7 @@ export function ImportStatementDialog({
     if (!open) return;
     setError(null);
     setSuccess(null);
+    setPdfFileName(null);
     if (cards.length === 1) {
       setCreditCardId(cards[0].id);
     }
@@ -71,6 +84,10 @@ export function ImportStatementDialog({
       setError(null);
       setSuccess(null);
       setJsonText("");
+      setPdfFileName(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
       if (cards.length !== 1) {
         setCreditCardId("");
       }
@@ -88,6 +105,43 @@ export function ImportStatementDialog({
     setJsonText(JSON.stringify(buildTemplatePayload(creditCardId), null, 2));
   }
 
+  function handlePdfChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    setError(null);
+    setSuccess(null);
+    setPdfFileName(file?.name ?? null);
+  }
+
+  function handlePdfImport() {
+    if (!creditCardId) {
+      setError("Selecciona la tarjeta antes de importar el PDF");
+      return;
+    }
+
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) {
+      setError("Selecciona el archivo PDF del extracto");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("creditCardId", creditCardId);
+    formData.append("pdf", file);
+
+    startTransition(async () => {
+      const result = await importCreditCardStatementPdf(formData);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+
+      setSuccess(
+        `Importados ${result.importedCount} movimientos (${result.expenseCount} consumos, ${result.paymentCount} pagos). Saldo al cierre: ${formatCurrency(result.usedBalanceAtClose)}.`
+      );
+      router.refresh();
+    });
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -95,9 +149,80 @@ export function ImportStatementDialog({
 
     let payload: unknown;
     try {
+      // #region agent log
+      const trimmed = jsonText.trim();
+      const parseProbe = (() => {
+        try {
+          JSON.parse(trimmed);
+          return { ok: true as const };
+        } catch (e) {
+          return {
+            ok: false as const,
+            error: e instanceof Error ? e.message : String(e),
+          };
+        }
+      })();
+      fetch("http://127.0.0.1:7484/ingest/b4fbe1ef-87c2-4a20-904f-a2a9b5b9695b", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "f5c98c",
+        },
+        body: JSON.stringify({
+          sessionId: "f5c98c",
+          runId: "pre-fix",
+          hypothesisId: "A-E",
+          location: "import-statement-dialog.tsx:handleSubmit",
+          message: "JSON parse attempt",
+          data: {
+            length: jsonText.length,
+            trimmedLength: trimmed.length,
+            startsWithBrace: trimmed.startsWith("{"),
+            startsWithBracket: trimmed.startsWith("["),
+            looksLikePdf: looksLikePdfText(trimmed),
+            hasColombianAmount: /\$\d{1,3}(\.\d{3})+,\d{2}/.test(trimmed),
+            first120: trimmed.slice(0, 120),
+            last80: trimmed.slice(-80),
+            parseOk: parseProbe.ok,
+            parseError: parseProbe.ok ? null : parseProbe.error,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
+      if (looksLikePdfText(trimmed)) {
+        setError(
+          "Pegaste texto del PDF, no JSON. Usa la sección «Importar PDF» arriba y selecciona tu archivo .pdf."
+        );
+        return;
+      }
+
       payload = JSON.parse(jsonText);
-    } catch {
-      setError("El JSON no es válido. Revisa comas, comillas y llaves.");
+    } catch (parseErr) {
+      // #region agent log
+      fetch("http://127.0.0.1:7484/ingest/b4fbe1ef-87c2-4a20-904f-a2a9b5b9695b", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "f5c98c",
+        },
+        body: JSON.stringify({
+          sessionId: "f5c98c",
+          runId: "pre-fix",
+          hypothesisId: "A-E",
+          location: "import-statement-dialog.tsx:handleSubmit:catch",
+          message: "JSON parse failed — user-facing error shown",
+          data: {
+            error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      setError(
+        "El JSON no es válido. Revisa comas, comillas y llaves, o importa el PDF directamente."
+      );
       return;
     }
 
@@ -147,9 +272,39 @@ export function ImportStatementDialog({
             </Select>
           </div>
 
+          <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-4">
+            <div>
+              <p className="text-sm font-medium">Importar PDF (recomendado)</p>
+              <p className="text-xs text-muted-foreground">
+                Sube el extracto RappiCard en PDF; la app lo convierte e importa
+                automáticamente.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                ref={fileInputRef}
+                id="import-pdf"
+                type="file"
+                accept="application/pdf,.pdf"
+                onChange={handlePdfChange}
+                className="cursor-pointer"
+              />
+              <Button
+                type="button"
+                disabled={pending || !creditCardId}
+                onClick={handlePdfImport}
+              >
+                {pending ? "Importando..." : "Importar PDF"}
+              </Button>
+            </div>
+            {pdfFileName && (
+              <p className="text-xs text-muted-foreground">Archivo: {pdfFileName}</p>
+            )}
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="import-json">JSON del extracto</Label>
+              <Label htmlFor="import-json">JSON del extracto (avanzado)</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -164,15 +319,14 @@ export function ImportStatementDialog({
               id="import-json"
               value={jsonText}
               onChange={(event) => setJsonText(event.target.value)}
-              rows={16}
+              rows={12}
               className="font-mono text-xs"
               placeholder='Pega aquí el JSON con periodStart, periodEnd, lines, etc.'
-              required
             />
             <p className="text-xs text-muted-foreground">
               Los movimientos <strong>EXPENSE</strong> incrementan la deuda;{" "}
-              <strong>PAYMENT_TO_CARD</strong> la reduce. Todo se guarda en una
-              sola transacción atómica.
+              <strong>PAYMENT_TO_CARD</strong> la reduce. No pegues texto copiado
+              del PDF en este campo.
             </p>
           </div>
 
@@ -190,7 +344,7 @@ export function ImportStatementDialog({
 
           <DialogFooter>
             <Button type="submit" disabled={pending || !creditCardId}>
-              {pending ? "Importando..." : "Importar extracto"}
+              {pending ? "Importando..." : "Importar JSON"}
             </Button>
           </DialogFooter>
         </form>

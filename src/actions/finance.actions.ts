@@ -21,6 +21,7 @@ import {
   type CreditCardStatementImportResult,
 } from "@/domain/credit/credit-card-statement.schema";
 import { importCreditCardStatementData } from "@/domain/credit/credit-card-statement-import.service";
+import { parseRappiCardPdfBuffer } from "@/domain/credit/rappicard-pdf-parser";
 import {
   computeInstallmentAmount,
   isMsiTerm,
@@ -966,5 +967,61 @@ export async function importCreditCardStatement(
   } catch (err) {
     console.error("importCreditCardStatement failed:", err);
     return { ok: false, error: mapTransactionError(err) };
+  }
+}
+
+/**
+ * Importa un extracto RappiCard desde archivo PDF.
+ */
+export async function importCreditCardStatementPdf(
+  formData: FormData
+): Promise<CreditCardStatementImportResult> {
+  const creditCardId = formData.get("creditCardId");
+  const file = formData.get("pdf");
+
+  if (typeof creditCardId !== "string" || !creditCardId) {
+    return { ok: false, error: "Selecciona la tarjeta de crédito" };
+  }
+
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "Selecciona un archivo PDF del extracto" };
+  }
+
+  if (!file.name.toLowerCase().endsWith(".pdf") && file.type !== "application/pdf") {
+    return { ok: false, error: "El archivo debe ser un PDF" };
+  }
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const parsed = await parseRappiCardPdfBuffer(buffer, creditCardId);
+    const validation = parseCreditCardStatementImport(parsed);
+
+    if (!validation.success) {
+      return {
+        ok: false,
+        error: validation.error,
+        fieldErrors: validation.fieldErrors,
+      };
+    }
+
+    const userId = await getDefaultUserId();
+    const timezone = await getUserTimezone();
+    const result = await importCreditCardStatementData(
+      userId,
+      timezone,
+      validation.data
+    );
+
+    revalidateAll();
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error("importCreditCardStatementPdf failed:", err);
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : mapTransactionError(err),
+    };
   }
 }
