@@ -2,7 +2,12 @@ import type { NextConfig } from "next";
 import { withSerwist } from "@serwist/turbopack";
 
 const nextConfig: NextConfig = {
-  /* opciones de configuración aquí */
+  serverExternalPackages: ["pdfjs-dist", "pdf-parse"],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "4mb",
+    },
+  },
 };
 
 export default withSerwist(nextConfig);

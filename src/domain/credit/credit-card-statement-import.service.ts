@@ -34,6 +34,40 @@ function lineDedupKey(line: CreditCardStatementLineInput): string {
   });
 }
 
+/** Clave legacy para imports previos sin tag import-hash (solo fecha + monto + tipo). */
+function legacyLineKey(line: CreditCardStatementLineInput): string {
+  return `${line.type}|${line.date}|${line.amount.toFixed(2)}`;
+}
+
+function legacyKeyFromTransaction(
+  amount: Prisma.Decimal | number | string,
+  date: Date,
+  tags: string[],
+  timezone: string
+): string | null {
+  const isPayment = tags.includes("card-payment");
+  const isExpense = tags.includes("card-expense");
+  if (!isPayment && !isExpense) return null;
+
+  const type = isPayment ? "PAYMENT_TO_CARD" : "EXPENSE";
+  const local = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+
+  return `${type}|${local}|${toNumber(amount).toFixed(2)}`;
+}
+
+/** Consumos antes que pagos para validar deuda acumulada en el mismo lote. */
+function sortImportLines(lines: CreditCardStatementLineInput[]) {
+  return [...lines].sort((a, b) => {
+    if (a.type !== b.type) return a.type === "EXPENSE" ? -1 : 1;
+    return a.date.localeCompare(b.date);
+  });
+}
+
 async function ensureCategory(
   tx: DbTx,
   userId: string,
@@ -162,25 +196,54 @@ async function importPaymentLine(
   });
 }
 
-async function loadExistingLineHashes(
+async function loadExistingImportKeys(
   tx: DbTx,
   userId: string,
-  creditCardId: string
-): Promise<Set<string>> {
+  creditCardId: string,
+  importTag: string,
+  timezone: string
+): Promise<{ hashes: Set<string>; legacyKeys: Set<string> }> {
   const existing = await tx.transaction.findMany({
-    where: { userId, creditCardId },
-    select: { tags: true },
+    where: {
+      userId,
+      OR: [
+        { creditCardId },
+        { creditCardId: null, tags: { has: importTag } },
+      ],
+    },
+    select: { tags: true, amount: true, date: true },
   });
 
   const hashes = new Set<string>();
+  const legacyKeys = new Set<string>();
+
   for (const row of existing) {
     for (const tag of row.tags) {
       if (tag.startsWith("import-hash:")) {
         hashes.add(tag.slice("import-hash:".length));
       }
     }
+
+    const legacyKey = legacyKeyFromTransaction(
+      row.amount,
+      row.date,
+      row.tags,
+      timezone
+    );
+    if (legacyKey) legacyKeys.add(legacyKey);
   }
-  return hashes;
+
+  return { hashes, legacyKeys };
+}
+
+function isLineAlreadyImported(
+  line: CreditCardStatementLineInput,
+  hashes: Set<string>,
+  legacyKeys: Set<string>
+): boolean {
+  return (
+    hashes.has(lineDedupKey(line)) || legacyKeys.has(legacyLineKey(line))
+  );
 }
 
 export async function importCreditCardStatementData(
@@ -200,19 +263,6 @@ export async function importCreditCardStatementData(
       throw new Error("Tarjeta de crédito no encontrada");
     }
 
-    if (input.sourceFileHash) {
-      const duplicatePdf = await tx.creditCardStatement.findFirst({
-        where: {
-          creditCardId: input.creditCardId,
-          sourceFileHash: input.sourceFileHash,
-        },
-        select: { id: true },
-      });
-      if (duplicatePdf) {
-        throw new Error("Este archivo PDF ya fue importado anteriormente");
-      }
-    }
-
     const existingStatement = await tx.creditCardStatement.findUnique({
       where: {
         creditCardId_cycleEnd: {
@@ -222,23 +272,37 @@ export async function importCreditCardStatementData(
       },
     });
 
-    const existingLineHashes = await loadExistingLineHashes(
-      tx,
-      userId,
-      input.creditCardId
-    );
+    const { hashes: existingLineHashes, legacyKeys } =
+      await loadExistingImportKeys(
+        tx,
+        userId,
+        input.creditCardId,
+        importTag,
+        timezone
+      );
 
-    const linesToImport = input.lines.filter((line) => {
-      const hash = lineDedupKey(line);
-      return !existingLineHashes.has(hash);
-    });
+    const linesToImport = sortImportLines(
+      input.lines.filter(
+        (line) => !isLineAlreadyImported(line, existingLineHashes, legacyKeys)
+      )
+    );
 
     const skippedCount = input.lines.length - linesToImport.length;
 
     if (linesToImport.length === 0) {
+      const duplicatePdf =
+        input.sourceFileHash &&
+        (await tx.creditCardStatement.findFirst({
+          where: {
+            creditCardId: input.creditCardId,
+            sourceFileHash: input.sourceFileHash,
+          },
+          select: { id: true },
+        }));
+
       throw new Error(
-        existingStatement
-          ? "Todas las transacciones de este extracto ya existen en la base de datos"
+        duplicatePdf || existingStatement
+          ? "Este extracto ya fue importado. El saldo de la tarjeta debería estar actualizado."
           : "No hay transacciones nuevas para importar"
       );
     }

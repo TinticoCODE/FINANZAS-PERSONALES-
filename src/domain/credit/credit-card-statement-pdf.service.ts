@@ -56,6 +56,9 @@ export async function processCreditCardStatementPdf(
     if (err instanceof PdfPasswordIncorrectError) {
       return { ok: false, error: err.message };
     }
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
     throw err;
   }
 }
