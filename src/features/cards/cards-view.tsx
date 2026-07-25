@@ -17,6 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageHeader } from "@/components/shared/page-header";
 import { CreditCardList } from "@/features/cards/credit-card-list";
+import {
+  ImportStatementDialog,
+  ImportStatementTrigger,
+} from "@/features/cards/import-statement-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { CreditCardData } from "@/types";
 
@@ -27,6 +31,7 @@ type CardsViewProps = {
 export function CardsView({ cards }: CardsViewProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -61,7 +66,12 @@ export function CardsView({ cards }: CardsViewProps) {
         title="Tarjetas de crédito"
         description="Administra tus tarjetas, cupos y fechas de pago"
         action={
-          <Dialog open={open} onOpenChange={setOpen}>
+          <div className="flex flex-wrap gap-2">
+            <ImportStatementTrigger
+              onClick={() => setImportOpen(true)}
+              disabled={cards.length === 0}
+            />
+            <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger render={<Button size="sm" className="gap-2" />}>
               <Plus className="h-4 w-4" />
               Nueva tarjeta
@@ -113,7 +123,14 @@ export function CardsView({ cards }: CardsViewProps) {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         }
+      />
+
+      <ImportStatementDialog
+        cards={cards}
+        open={importOpen}
+        onOpenChange={setImportOpen}
       />
 
       {cards.length === 0 ? (

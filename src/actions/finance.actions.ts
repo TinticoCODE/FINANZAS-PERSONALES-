@@ -17,6 +17,11 @@ import {
   type TransactionActionResult,
 } from "@/domain/transactions/transaction.schema";
 import {
+  parseCreditCardStatementImport,
+  type CreditCardStatementImportResult,
+} from "@/domain/credit/credit-card-statement.schema";
+import { importCreditCardStatementData } from "@/domain/credit/credit-card-statement-import.service";
+import {
   computeInstallmentAmount,
   isMsiTerm,
 } from "@/domain/credit/msi.constants";
@@ -929,4 +934,37 @@ export async function toggleRecurringTransaction(id: string, isActive: boolean) 
     data: { isActive },
   });
   revalidateAll();
+}
+
+/**
+ * Importación masiva de extracto de tarjeta de crédito.
+ * Todo el periodo se persiste en una sola transacción Prisma (atomicidad).
+ */
+export async function importCreditCardStatement(
+  input: unknown
+): Promise<CreditCardStatementImportResult> {
+  const validation = parseCreditCardStatementImport(input);
+  if (!validation.success) {
+    return {
+      ok: false,
+      error: validation.error,
+      fieldErrors: validation.fieldErrors,
+    };
+  }
+
+  try {
+    const userId = await getDefaultUserId();
+    const timezone = await getUserTimezone();
+    const result = await importCreditCardStatementData(
+      userId,
+      timezone,
+      validation.data
+    );
+
+    revalidateAll();
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error("importCreditCardStatement failed:", err);
+    return { ok: false, error: mapTransactionError(err) };
+  }
 }

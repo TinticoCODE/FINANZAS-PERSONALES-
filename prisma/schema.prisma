@@ -213,7 +213,7 @@ model RecurringTransaction {
   @@index([nextRunAt])
 }
 
-/// Cierre de ciclo de facturación ya procesado (idempotencia de la tarea programada).
+/// Extracto / cierre de ciclo de facturación (idempotencia por fin de ciclo).
 model CreditCardStatement {
   id                 String   @id @default(cuid())
   userId             String
@@ -222,6 +222,10 @@ model CreditCardStatement {
   cycleEnd           DateTime @db.Timestamptz(3)
   closedAt           DateTime @default(now()) @db.Timestamptz(3)
   usedBalanceAtClose Decimal  @db.Decimal(12, 2)
+  totalPaymentDue    Decimal? @db.Decimal(12, 2)
+  minPaymentDue      Decimal? @db.Decimal(12, 2)
+  interestCharged    Decimal? @db.Decimal(12, 2)
+  importSource       String?
 
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   creditCard CreditCard @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
