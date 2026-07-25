@@ -62,11 +62,14 @@ type TransactionWithRelations = Transaction & {
 };
 
 export function mapTransaction(tx: TransactionWithRelations): TransactionUI {
-  const fundSource = tx.creditCard
-    ? `Tarjeta · ${tx.creditCard.name}`
-    : tx.paymentMethod === "CASH"
-      ? "Efectivo"
-      : tx.account?.name ?? "Sin origen";
+  const fundSource =
+    tx.type === "PAYMENT_TO_CARD" && tx.account && tx.creditCard
+      ? `${tx.account.name} → ${tx.creditCard.name}`
+      : tx.creditCard
+        ? `Tarjeta · ${tx.creditCard.name}`
+        : tx.paymentMethod === "CASH"
+          ? "Efectivo"
+          : tx.account?.name ?? "Sin origen";
 
   return {
     id: tx.id,
@@ -80,6 +83,7 @@ export function mapTransaction(tx: TransactionWithRelations): TransactionUI {
     description: tx.description ?? "",
     tags: tx.tags,
     installments: tx.installments,
+    currentInstallment: tx.currentInstallment,
     isInstallments: tx.isInstallments,
     installmentAmount: tx.installmentAmount
       ? toNumber(tx.installmentAmount)
@@ -170,7 +174,7 @@ export function mapRecurringTransaction(
 
   return {
     id: item.id,
-    type: item.type,
+    type: item.type === "PAYMENT_TO_CARD" ? "EXPENSE" : item.type,
     amount: toNumber(item.amount),
     description: item.description ?? undefined,
     category: item.category.name,

@@ -1,16 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { CreditCardItem } from "@/features/cards/credit-card-item";
-import type { CreditCardData } from "@/types";
+import type { AccountData, CreditCardData } from "@/types";
 
 type CreditCardListProps = {
   cards: CreditCardData[];
+  accounts: AccountData[];
   onDelete?: (id: string) => void;
   deleting?: boolean;
 };
 
-export function CreditCardList({ cards, onDelete, deleting }: CreditCardListProps) {
+export function CreditCardList({
+  cards,
+  accounts,
+  onDelete,
+  deleting,
+}: CreditCardListProps) {
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {cards.map((card, index) => (
@@ -21,7 +28,12 @@ export function CreditCardList({ cards, onDelete, deleting }: CreditCardListProp
           transition={{ delay: index * 0.1 }}
           whileHover={{ y: -4 }}
         >
-          <CreditCardItem card={card} onDelete={onDelete} deleting={deleting} />
+          <CreditCardItem
+            card={card}
+            accounts={accounts}
+            onDelete={onDelete}
+            deleting={deleting}
+          />
         </motion.div>
       ))}
     </div>

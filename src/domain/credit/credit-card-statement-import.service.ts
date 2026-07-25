@@ -185,6 +185,7 @@ async function importPaymentLine(
       description: params.line.description,
       paymentMethod: "TRANSFER",
       installments: 1,
+      currentInstallment: 1,
       isInstallments: false,
       hasZeroInterest: false,
       tags: [params.importTag, "card-payment", hashTag],

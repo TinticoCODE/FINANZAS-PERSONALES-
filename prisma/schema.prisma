@@ -11,6 +11,8 @@ datasource db {
 enum TransactionType {
   INCOME
   EXPENSE
+  /// Pago a tarjeta: requiere cuenta origen (accountId) y tarjeta destino (creditCardId).
+  PAYMENT_TO_CARD
 }
 
 enum AccountType {
@@ -123,6 +125,8 @@ model Transaction {
   description   String?
   paymentMethod PaymentMethod   @default(DEBIT)
   installments  Int             @default(1)
+  /// Cuota vigente al registrar (inmutable; p. ej. extracto dice 2 de 6).
+  currentInstallment Int        @default(1)
   /// Compra diferida a cuotas (MSI o con interés).
   isInstallments    Boolean     @default(false)
   /// Cuota mensual fija (principal/N en MSI; amortización en diferido con interés).
@@ -130,6 +134,8 @@ model Transaction {
   /// Meses sin intereses (3, 6, 9) — excluye la compra del cálculo de intereses punitorios.
   hasZeroInterest   Boolean     @default(false)
   tags          String[]        @default([])
+  /// Agrupa las dos patas de partida doble (cuenta origen + tarjeta destino).
+  transferGroupId String?
   attachmentUrl String?
   /// Almacenado en UTC (marca de tiempo con zona). El significado de negocio se interpreta en la zona horaria del usuario.
   date          DateTime        @default(now()) @db.Timestamptz(3)
@@ -145,6 +151,7 @@ model Transaction {
   @@index([accountId])
   @@index([categoryId])
   @@index([creditCardId])
+  @@index([transferGroupId])
 }
 
 model CreditCard {

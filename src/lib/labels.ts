@@ -21,6 +21,7 @@ export const paymentMethodLabels: Record<PaymentMethod, string> = {
 export const transactionTypeLabels = {
   INCOME: "Ingreso",
   EXPENSE: "Gasto",
+  PAYMENT_TO_CARD: "Pago a tarjeta",
 } as const;
 
 export const interestTypeLabels = {

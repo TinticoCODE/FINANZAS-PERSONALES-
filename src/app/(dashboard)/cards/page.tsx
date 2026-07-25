@@ -1,7 +1,7 @@
 import { CardsView } from "@/features/cards/cards-view";
-import { getCreditCards } from "@/services/data.service";
+import { getAccounts, getCreditCards } from "@/services/data.service";
 
 export default async function CardsPage() {
-  const cards = await getCreditCards();
-  return <CardsView cards={cards} />;
+  const [cards, accounts] = await Promise.all([getCreditCards(), getAccounts()]);
+  return <CardsView cards={cards} accounts={accounts} />;
 }

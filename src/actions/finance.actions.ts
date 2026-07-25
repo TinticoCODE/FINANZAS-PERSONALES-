@@ -23,6 +23,11 @@ import {
 import { importCreditCardStatementData } from "@/domain/credit/credit-card-statement-import.service";
 import { processCreditCardStatementPdf } from "@/domain/credit/credit-card-statement-pdf.service";
 import {
+  parseCreditCardPaymentInput,
+  type CreditCardPaymentResult,
+} from "@/domain/credit/credit-card-payment.schema";
+import { processCreditCardPayment } from "@/domain/credit/credit-card-payment.service";
+import {
   computeInstallmentAmount,
   isMsiTerm,
 } from "@/domain/credit/msi.constants";
@@ -76,9 +81,22 @@ async function applyTransactionEffects(
   amount: number;
   paymentMethod: PaymentMethod;
   reverse?: boolean;
+  tags?: string[];
 }) {
   const multiplier = params.reverse ? -1 : 1;
   const amount = params.amount * multiplier;
+  const isCardPaymentSource = params.tags?.includes("card-payment-source");
+
+  if (params.type === "PAYMENT_TO_CARD") {
+    if (!params.accountId || !params.creditCardId) {
+      throw new Error("Pago a tarjeta requiere cuenta origen y tarjeta destino");
+    }
+    await tx.creditCard.update({
+      where: { id: params.creditCardId },
+      data: { usedBalance: { increment: -amount } },
+    });
+    return;
+  }
 
   if (params.type === "INCOME") {
     if (!params.accountId) {
@@ -100,6 +118,17 @@ async function applyTransactionEffects(
   }
 
   if (params.paymentMethod === "CASH") {
+    return;
+  }
+
+  if (isCardPaymentSource) {
+    if (!params.accountId) {
+      throw new Error("La pata origen del pago requiere cuenta bancaria");
+    }
+    await tx.account.update({
+      where: { id: params.accountId },
+      data: { balance: { increment: -amount } },
+    });
     return;
   }
 
@@ -305,6 +334,7 @@ export async function createTransaction(
           description: data.description,
           paymentMethod: data.paymentMethod,
           installments: installmentFields.installments,
+          currentInstallment: 1,
           isInstallments: installmentFields.isInstallments,
           hasZeroInterest: installmentFields.hasZeroInterest,
           installmentAmount: installmentFields.installmentAmount,
@@ -384,15 +414,32 @@ export async function deleteTransaction(
     }
 
     await prisma.$transaction(async (tx) => {
-      await applyTransactionEffects(tx, {
-        accountId: existing.accountId,
-        creditCardId: existing.creditCardId,
-        type: existing.type,
-        amount: toNumber(existing.amount),
-        paymentMethod: existing.paymentMethod,
-        reverse: true,
-      });
-      await tx.transaction.delete({ where: { id } });
+      const groupId = existing.transferGroupId;
+      const related = groupId
+        ? await tx.transaction.findMany({
+            where: { userId, transferGroupId: groupId },
+          })
+        : [existing];
+
+      for (const row of related) {
+        await applyTransactionEffects(tx, {
+          accountId: row.accountId,
+          creditCardId: row.creditCardId,
+          type: row.type,
+          amount: toNumber(row.amount),
+          paymentMethod: row.paymentMethod,
+          tags: row.tags,
+          reverse: true,
+        });
+      }
+
+      if (groupId) {
+        await tx.transaction.deleteMany({
+          where: { userId, transferGroupId: groupId },
+        });
+      } else {
+        await tx.transaction.delete({ where: { id } });
+      }
     });
 
     revalidateAll();
@@ -1014,5 +1061,32 @@ export async function importCreditCardStatementPdf(
           ? err.message
           : mapTransactionError(err),
     };
+  }
+}
+
+/**
+ * Pago de tarjeta con partida doble: debita cuenta origen y reduce deuda de la tarjeta.
+ */
+export async function payCreditCard(
+  input: unknown
+): Promise<CreditCardPaymentResult> {
+  const validation = parseCreditCardPaymentInput(input);
+  if (!validation.success) {
+    return { ok: false, error: validation.error };
+  }
+
+  try {
+    const userId = await getDefaultUserId();
+    const timezone = await getUserTimezone();
+    const result = await processCreditCardPayment(
+      userId,
+      timezone,
+      validation.data
+    );
+    revalidateAll();
+    return { ok: true, ...result };
+  } catch (err) {
+    console.error("payCreditCard failed:", err);
+    return { ok: false, error: mapTransactionError(err) };
   }
 }

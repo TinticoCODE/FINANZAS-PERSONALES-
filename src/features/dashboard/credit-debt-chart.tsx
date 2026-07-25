@@ -17,7 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { formatCompact, formatPercent } from "@/lib/format";
+import { formatCompact } from "@/lib/format";
 import type { CreditCardData } from "@/types";
 
 type CreditDebtChartProps = {
@@ -29,7 +29,8 @@ export function CreditDebtChart({ cards }: CreditDebtChartProps) {
     () =>
       cards.map((card) => ({
         name: card.name,
-        used: Math.max(Number(card.usedBalance) || 0, 0),
+        used: Math.max(Number(card.projectedRemainingDebt ?? card.usedBalance) || 0, 0),
+        stored: Math.max(Number(card.usedBalance) || 0, 0),
         available: Math.max(Number(card.creditLimit - card.usedBalance) || 0, 0),
         utilization:
           card.creditLimit > 0
@@ -49,7 +50,9 @@ export function CreditDebtChart({ cards }: CreditDebtChartProps) {
       <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-base font-semibold">Deuda de tarjetas</CardTitle>
-          <CardDescription>Saldo utilizado por tarjeta</CardDescription>
+          <CardDescription>
+            Deuda proyectada por tarjeta (cuotas pendientes reales)
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-[220px] w-full">
@@ -78,7 +81,7 @@ export function CreditDebtChart({ cards }: CreditDebtChartProps) {
                 />
                 <Bar
                   dataKey="used"
-                  name="Utilizado"
+                  name="Deuda proyectada"
                   fill="#6366f1"
                   radius={[0, 6, 6, 0]}
                   animationDuration={800}
@@ -91,7 +94,12 @@ export function CreditDebtChart({ cards }: CreditDebtChartProps) {
               <div key={card.name} className="flex items-center justify-between text-sm">
                 <span>{card.name}</span>
                 <span className="text-muted-foreground">
-                  {formatPercent(card.utilization)} utilizado
+                  {formatCompact(card.used)} proyectado
+                  {card.stored !== card.used && (
+                    <span className="ml-1 text-xs">
+                      (registrado {formatCompact(card.stored)})
+                    </span>
+                  )}
                 </span>
               </div>
             ))}

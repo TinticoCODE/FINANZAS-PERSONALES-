@@ -5,11 +5,13 @@ import { prisma } from "@/lib/prisma";
 import { mapTransaction } from "@/lib/mappers";
 import { getDefaultUserId } from "@/lib/user";
 
+import type { TransactionType } from "@/types";
+
 export type TransactionSearchResult = {
   id: string;
   description: string;
   amount: number;
-  type: "INCOME" | "EXPENSE";
+  type: TransactionType;
   category: string;
   categoryColor: string;
   date: string;

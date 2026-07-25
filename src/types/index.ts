@@ -1,4 +1,4 @@
-export type TransactionType = "INCOME" | "EXPENSE";
+export type TransactionType = "INCOME" | "EXPENSE" | "PAYMENT_TO_CARD";
 
 export type StatCardData = {
   id: string;
@@ -25,6 +25,7 @@ export type Transaction = {
   description: string;
   tags: string[];
   installments?: number;
+  currentInstallment?: number;
   isInstallments?: boolean;
   installmentAmount?: number;
   hasZeroInterest?: boolean;
@@ -48,6 +49,12 @@ export type CreditCardData = {
   deferredInstallmentsDue?: number;
   msiInstallmentsDue?: number;
   minPayment?: number;
+  /** Deuda real proyectada según cuotas pendientes (motor inmutable). */
+  projectedRemainingDebt?: number;
+  /** Cuota total proyectada del ciclo actual. */
+  projectedPaymentDueThisCycle?: number;
+  /** Saldo usedBalance almacenado en Prisma (referencia contable). */
+  storedUsedBalance?: number;
 };
 
 export type BudgetData = {
@@ -89,7 +96,7 @@ export type ReminderData = {
 
 export type RecurringTransactionData = {
   id: string;
-  type: TransactionType;
+  type: "INCOME" | "EXPENSE";
   amount: number;
   description?: string;
   category: string;

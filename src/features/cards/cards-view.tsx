@@ -22,13 +22,14 @@ import {
   ImportStatementTrigger,
 } from "@/features/cards/import-statement-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
-import type { CreditCardData } from "@/types";
+import type { AccountData, CreditCardData } from "@/types";
 
 type CardsViewProps = {
   cards: CreditCardData[];
+  accounts: AccountData[];
 };
 
-export function CardsView({ cards }: CardsViewProps) {
+export function CardsView({ cards, accounts }: CardsViewProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -141,7 +142,12 @@ export function CardsView({ cards }: CardsViewProps) {
           onAction={() => setOpen(true)}
         />
       ) : (
-        <CreditCardList cards={cards} onDelete={handleDelete} deleting={pending} />
+        <CreditCardList
+          cards={cards}
+          accounts={accounts}
+          onDelete={handleDelete}
+          deleting={pending}
+        />
       )}
     </div>
   );

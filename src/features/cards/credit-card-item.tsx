@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, Calendar, CreditCard, Info, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Calendar, CreditCard, Info, Trash2, Wallet } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -27,10 +28,12 @@ import { teaToMonthlyPercent } from "@/services/credit-card.service";
 import { cn } from "@/lib/utils";
 import { utcToUserLocal } from "@/utils/dates";
 import { useUserTimezone } from "@/contexts/user-timezone-context";
-import type { CreditCardData } from "@/types";
+import { CreditCardPaymentDialog } from "@/features/cards/credit-card-payment-dialog";
+import type { AccountData, CreditCardData } from "@/types";
 
 type CreditCardItemProps = {
   card: CreditCardData;
+  accounts: AccountData[];
   onDelete?: (id: string) => void;
   deleting?: boolean;
 };
@@ -71,9 +74,17 @@ function getUtilizationTone(utilization: number) {
   };
 }
 
-export function CreditCardItem({ card, onDelete, deleting }: CreditCardItemProps) {
+export function CreditCardItem({
+  card,
+  accounts,
+  onDelete,
+  deleting,
+}: CreditCardItemProps) {
   const timezone = useUserTimezone();
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const displayName = normalizeCardName(card.name);
+
+  const projectedDebt = card.projectedRemainingDebt ?? card.usedBalance;
 
   const utilization =
     card.creditLimit > 0 ? (card.usedBalance / card.creditLimit) * 100 : 0;
@@ -130,11 +141,20 @@ export function CreditCardItem({ card, onDelete, deleting }: CreditCardItemProps
         <div className="space-y-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Saldo utilizado
+              Saldo utilizado (registrado)
             </p>
             <p className={cn("text-3xl font-bold tracking-tight", tone.balance)}>
               {formatCurrency(card.usedBalance)}
             </p>
+            {card.projectedRemainingDebt !== undefined &&
+              Math.abs(card.projectedRemainingDebt - card.usedBalance) > 1 && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Deuda proyectada hoy:{" "}
+                  <span className="font-semibold text-foreground">
+                    {formatCurrency(projectedDebt)}
+                  </span>
+                </p>
+              )}
           </div>
 
           <div className="space-y-2">
@@ -268,7 +288,26 @@ export function CreditCardItem({ card, onDelete, deleting }: CreditCardItemProps
             </AccordionContent>
           </AccordionItem>
         </Accordion>
+
+        {card.usedBalance > 0 && (
+          <Button
+            type="button"
+            className="w-full gap-2"
+            onClick={() => setPaymentOpen(true)}
+            disabled={accounts.length === 0}
+          >
+            <Wallet className="h-4 w-4" />
+            Pagar tarjeta
+          </Button>
+        )}
       </CardContent>
+
+      <CreditCardPaymentDialog
+        card={card}
+        accounts={accounts}
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+      />
     </Card>
   );
 }
