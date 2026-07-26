@@ -43,6 +43,7 @@ import {
   calculateCardProjectedDebt,
   type ProjectedDebtTransaction,
 } from "@/domain/credit/debt-projection.service";
+import { getUpcomingBillingDates } from "@/domain/billing/credit-card-billing";
 import type {
   ChartDataPoint,
   CreditCardData,
@@ -130,26 +131,28 @@ async function enrichCreditCardsWithPayments(
   return cards.map((card) => {
     const mapped = mapCreditCard(card);
     const cardPurchases = purchasesByCard.get(card.id) ?? [];
-    const referenceLocal = toUserLocalTime(new Date(), timezone);
+    const billingConfig = {
+      cutOffDate: card.cutOffDate,
+      paymentDueDate: card.paymentDueDate,
+      interestRate: toNumber(card.interestRate),
+    };
     const payment = calculatePaymentToAvoidInterest(
-      {
-        cutOffDate: card.cutOffDate,
-        paymentDueDate: card.paymentDueDate,
-        interestRate: toNumber(card.interestRate),
-      },
+      billingConfig,
       cardPurchases,
-      referenceLocal
+      timezone
     );
 
     const projected = calculateCardProjectedDebt(
       projectedInputsByCard.get(card.id) ?? [],
       toNumber(card.usedBalance),
-      {
-        cutOffDate: card.cutOffDate,
-        paymentDueDate: card.paymentDueDate,
-        interestRate: toNumber(card.interestRate),
-      },
-      referenceLocal
+      billingConfig,
+      timezone
+    );
+
+    const upcoming = getUpcomingBillingDates(
+      card.cutOffDate,
+      card.paymentDueDate,
+      timezone
     );
 
     return {
@@ -162,6 +165,12 @@ async function enrichCreditCardsWithPayments(
       projectedRemainingDebt: projected.projectedRemainingDebt,
       projectedPaymentDueThisCycle: projected.projectedPaymentDueThisCycle,
       storedUsedBalance: projected.storedUsedBalance,
+      daysToCutoff: upcoming.daysToCutoff,
+      daysToPayment: upcoming.daysToPayment,
+      nextCutoffDate: upcoming.nextCutoffLocal.toISOString(),
+      nextPaymentDueDate: upcoming.nextPaymentDueLocal.toISOString(),
+      activeCycleStart: payment.cycle.cycleStart.toISOString(),
+      activeCycleEnd: payment.cycle.cycleEnd.toISOString(),
     };
   });
 }

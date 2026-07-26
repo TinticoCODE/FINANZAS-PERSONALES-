@@ -1,7 +1,21 @@
 /**
  * Motor de crédito revolvente para tarjetas de crédito.
  * TEA = Tasa Efectiva Anual (%). Cuota única = 0% interés (periodo de gracia).
+ * Fechas de corte/pago: src/domain/billing/credit-card-billing.ts
  */
+
+import {
+  getCurrentBillingCycle,
+  getCurrentPaymentDueDate,
+  getInstallmentPaymentDates,
+  getPaymentDueForCycle,
+  getStatementCycleForInstant,
+  isWithinCycle,
+  sameMonthYear,
+  type StatementCycle,
+} from "@/domain/billing/credit-card-billing";
+
+export type { StatementCycle };
 
 export type CreditCardBillingConfig = {
   cutOffDate: number;
@@ -26,11 +40,6 @@ export type InstallmentBreakdown = {
   remainingBalance: number;
 };
 
-export type StatementCycle = {
-  cycleStart: Date;
-  cycleEnd: Date;
-};
-
 export type PaymentToAvoidInterest = {
   total: number;
   singleInstallmentCurrentCycle: number;
@@ -43,15 +52,6 @@ export type PaymentToAvoidInterest = {
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function clampDay(year: number, month: number, day: number): Date {
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  return new Date(year, month, Math.min(day, lastDay));
-}
-
-function sameMonthYear(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
 /** Convierte TEA (%) a tasa mensual efectiva (decimal). */
@@ -124,8 +124,7 @@ export function buildZeroInterestSchedule(
   let remaining = principal;
 
   for (let i = 1; i <= installments; i++) {
-    const payment =
-      i === installments ? round2(remaining) : basePayment;
+    const payment = i === installments ? round2(remaining) : basePayment;
     remaining = round2(Math.max(remaining - payment, 0));
     schedule.push({
       installmentNumber: i,
@@ -142,7 +141,8 @@ export function buildZeroInterestSchedule(
 function getDueInstallmentAmount(
   purchase: CreditCardPurchase,
   config: CreditCardBillingConfig,
-  paymentDueDate: Date
+  paymentDueDate: Date,
+  timezone: string
 ): number {
   const installments = Math.max(1, purchase.installments);
   if (installments === 1) return purchase.amount;
@@ -151,7 +151,8 @@ function getDueInstallmentAmount(
     purchase.date,
     installments,
     config.cutOffDate,
-    config.paymentDueDate
+    config.paymentDueDate,
+    timezone
   );
   const dueIndex = paymentDates.findIndex((d) => sameMonthYear(d, paymentDueDate));
   if (dueIndex < 0 || dueIndex >= installments) return 0;
@@ -171,155 +172,32 @@ function getDueInstallmentAmount(
   return schedule[dueIndex]?.payment ?? 0;
 }
 
-/** Ciclo de facturación que contiene la fecha de compra. */
+/** @deprecated Usar getStatementCycleForInstant desde credit-card-billing */
 export function getStatementCycleForDate(
   transactionDate: Date,
   cutOffDate: number
 ): StatementCycle {
-  const y = transactionDate.getFullYear();
-  const m = transactionDate.getMonth();
-  const d = transactionDate.getDate();
-
-  let cycleEndMonth = m;
-  let cycleEndYear = y;
-  if (d > cutOffDate) {
-    cycleEndMonth += 1;
-    if (cycleEndMonth > 11) {
-      cycleEndMonth = 0;
-      cycleEndYear += 1;
-    }
-  }
-
-  const cycleEnd = clampDay(cycleEndYear, cycleEndMonth, cutOffDate);
-  cycleEnd.setHours(23, 59, 59, 999);
-
-  let cycleStartMonth = cycleEndMonth - 1;
-  let cycleStartYear = cycleEndYear;
-  if (cycleStartMonth < 0) {
-    cycleStartMonth = 11;
-    cycleStartYear -= 1;
-  }
-
-  const cycleStart = clampDay(cycleStartYear, cycleStartMonth, cutOffDate);
-  cycleStart.setDate(cycleStart.getDate() + 1);
-  cycleStart.setHours(0, 0, 0, 0);
-
-  return { cycleStart, cycleEnd };
+  return getStatementCycleForInstant(transactionDate, cutOffDate, "America/Bogota");
 }
 
-/** Fecha límite de pago asociada al cierre de un ciclo. */
-export function getPaymentDueForCycle(
-  cycleEnd: Date,
-  cutOffDate: number,
-  paymentDueDate: number
-): Date {
-  let payMonth = cycleEnd.getMonth();
-  let payYear = cycleEnd.getFullYear();
-
-  if (paymentDueDate <= cutOffDate) {
-    payMonth += 1;
-    if (payMonth > 11) {
-      payMonth = 0;
-      payYear += 1;
-    }
-  }
-
-  const due = clampDay(payYear, payMonth, paymentDueDate);
-  due.setHours(23, 59, 59, 999);
-  return due;
-}
-
-/** Ciclo de facturación activo para una fecha de referencia. */
-export function getCurrentBillingCycle(
-  cutOffDate: number,
-  referenceDate: Date = new Date()
-): StatementCycle {
-  const y = referenceDate.getFullYear();
-  const m = referenceDate.getMonth();
-  const d = referenceDate.getDate();
-
-  let cycleEndMonth = m;
-  let cycleEndYear = y;
-  if (d > cutOffDate) {
-    cycleEndMonth += 1;
-    if (cycleEndMonth > 11) {
-      cycleEndMonth = 0;
-      cycleEndYear += 1;
-    }
-  }
-
-  const cycleEnd = clampDay(cycleEndYear, cycleEndMonth, cutOffDate);
-  cycleEnd.setHours(23, 59, 59, 999);
-
-  let cycleStartMonth = cycleEndMonth - 1;
-  let cycleStartYear = cycleEndYear;
-  if (cycleStartMonth < 0) {
-    cycleStartMonth = 11;
-    cycleStartYear -= 1;
-  }
-
-  const cycleStart = clampDay(cycleStartYear, cycleStartMonth, cutOffDate);
-  cycleStart.setDate(cycleStart.getDate() + 1);
-  cycleStart.setHours(0, 0, 0, 0);
-
-  return { cycleStart, cycleEnd };
-}
-
-/** Fecha de pago del mes actual (o próxima si aún no llega). */
-export function getCurrentPaymentDueDate(
-  config: CreditCardBillingConfig,
-  referenceDate: Date = new Date()
-): Date {
-  const cycle = getCurrentBillingCycle(config.cutOffDate, referenceDate);
-  return getPaymentDueForCycle(
-    cycle.cycleEnd,
-    config.cutOffDate,
-    config.paymentDueDate
-  );
-}
-
-function isWithinCycle(date: Date, cycle: StatementCycle): boolean {
-  return date >= cycle.cycleStart && date <= cycle.cycleEnd;
-}
-
-function getInstallmentPaymentDates(
-  purchaseDate: Date,
-  installments: number,
-  cutOffDate: number,
-  paymentDueDate: number
-): Date[] {
-  const { cycleEnd } = getStatementCycleForDate(purchaseDate, cutOffDate);
-  const firstPayment = getPaymentDueForCycle(
-    cycleEnd,
-    cutOffDate,
-    paymentDueDate
-  );
-
-  const dates: Date[] = [];
-  for (let i = 0; i < installments; i++) {
-    const due = new Date(firstPayment);
-    due.setMonth(due.getMonth() + i);
-    const normalized = clampDay(
-      due.getFullYear(),
-      due.getMonth(),
-      paymentDueDate
-    );
-    normalized.setHours(23, 59, 59, 999);
-    dates.push(normalized);
-  }
-  return dates;
-}
+export {
+  getCurrentBillingCycle,
+  getCurrentPaymentDueDate,
+  getPaymentDueForCycle,
+  getInstallmentPaymentDates,
+} from "@/domain/billing/credit-card-billing";
 
 /**
- * Pago total para no generar intereses en el mes actual:
+ * Pago total para no generar intereses en el ciclo vigente:
  * (Compras a 1 cuota del ciclo actual) + (Cuota mensual de compras diferidas de ciclos anteriores).
  */
 export function calculatePaymentToAvoidInterest(
   config: CreditCardBillingConfig,
   purchases: CreditCardPurchase[],
-  referenceDate: Date = new Date()
+  timezone: string,
+  instantUtc: Date = new Date()
 ): PaymentToAvoidInterest {
-  const cycle = getCurrentBillingCycle(config.cutOffDate, referenceDate);
+  const cycle = getCurrentBillingCycle(config.cutOffDate, timezone, instantUtc);
   const paymentDueDate = getPaymentDueForCycle(
     cycle.cycleEnd,
     config.cutOffDate,
@@ -334,15 +212,16 @@ export function calculatePaymentToAvoidInterest(
     const installments = Math.max(1, purchase.installments);
 
     if (installments === 1) {
-      if (isWithinCycle(purchase.date, cycle)) {
+      if (isWithinCycle(purchase.date, cycle, timezone)) {
         singleInstallmentCurrentCycle += purchase.amount;
       }
       continue;
     }
 
-    const purchaseCycle = getStatementCycleForDate(
+    const purchaseCycle = getStatementCycleForInstant(
       purchase.date,
-      config.cutOffDate
+      config.cutOffDate,
+      timezone
     );
     const isFromPreviousCycle = purchaseCycle.cycleEnd < cycle.cycleStart;
 
@@ -351,7 +230,8 @@ export function calculatePaymentToAvoidInterest(
     const dueAmount = getDueInstallmentAmount(
       purchase,
       config,
-      paymentDueDate
+      paymentDueDate,
+      timezone
     );
 
     if (dueAmount <= 0) continue;
@@ -385,6 +265,7 @@ export function previewCreditPurchase(
     cutOffDate?: number;
     paymentDueDate?: number;
     purchaseDate?: Date;
+    timezone?: string;
   }
 ): {
   schedule: InstallmentBreakdown[];
@@ -395,6 +276,7 @@ export function previewCreditPurchase(
   isMsi: boolean;
 } {
   const hasZeroInterest = options?.hasZeroInterest ?? false;
+  const timezone = options?.timezone ?? "America/Bogota";
   const schedule = buildAmortizationSchedule(
     amount,
     installments,
@@ -414,7 +296,8 @@ export function previewCreditPurchase(
           options.purchaseDate,
           installments,
           options.cutOffDate,
-          options.paymentDueDate
+          options.paymentDueDate,
+          timezone
         )
       : [];
 

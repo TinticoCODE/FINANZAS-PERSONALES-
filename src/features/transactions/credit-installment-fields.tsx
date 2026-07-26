@@ -5,14 +5,9 @@ import { CalendarDays, Sparkles } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import {
-  MSI_INSTALLMENT_OPTIONS,
+  MSI_INSTALLMENT_SUGGESTIONS,
   computeInstallmentAmount,
 } from "@/domain/credit/msi.constants";
 import { formatCurrency } from "@/lib/format";
@@ -71,6 +66,7 @@ export function CreditInstallmentFields({
         cutOffDate: selectedCard.cutOffDate,
         paymentDueDate: selectedCard.paymentDueDate,
         purchaseDate: purchaseDateObj,
+        timezone,
       }
     );
   }, [
@@ -79,12 +75,13 @@ export function CreditInstallmentFields({
     selectedCard,
     hasZeroInterest,
     purchaseDate,
+    timezone,
   ]);
 
   const handleMsiToggle = (checked: boolean) => {
     onHasZeroInterestChange(checked);
-    if (checked && !MSI_INSTALLMENT_OPTIONS.includes(parsedInstallments as 3 | 6 | 9)) {
-      onInstallmentsChange("3");
+    if (checked && parsedInstallments < 2) {
+      onInstallmentsChange("2");
     }
   };
 
@@ -108,40 +105,36 @@ export function CreditInstallmentFields({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {hasZeroInterest ? (
-          <div className="space-y-2">
-            <Label htmlFor="msi-term">Plazo MSI</Label>
-            <Select
-              value={String(parsedInstallments)}
-              onValueChange={(value) => onInstallmentsChange(value ?? "3")}
-            >
-              <SelectTrigger id="msi-term" className="w-full">
-                <span>{parsedInstallments} meses sin intereses</span>
-              </SelectTrigger>
-              <SelectContent>
-                {MSI_INSTALLMENT_OPTIONS.map((term) => (
-                  <SelectItem key={term} value={String(term)}>
-                    {term} meses sin intereses
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <Label htmlFor="installments">Número de cuotas</Label>
-            <Input
-              id="installments"
-              name="installments"
-              type="number"
-              min="1"
-              max="48"
-              required
-              value={installments}
-              onChange={(e) => onInstallmentsChange(e.target.value)}
-            />
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label htmlFor="installments">
+            {hasZeroInterest ? "Plazo MSI (meses)" : "Número de cuotas"}
+          </Label>
+          <Input
+            id="installments"
+            name={hasZeroInterest ? undefined : "installments"}
+            type="number"
+            min={hasZeroInterest ? "2" : "1"}
+            max="48"
+            required
+            value={installments}
+            onChange={(e) => onInstallmentsChange(e.target.value)}
+          />
+          {hasZeroInterest && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {MSI_INSTALLMENT_SUGGESTIONS.map((term) => (
+                <Button
+                  key={term}
+                  type="button"
+                  variant={parsedInstallments === term ? "default" : "outline"}
+                  size="xs"
+                  onClick={() => onInstallmentsChange(String(term))}
+                >
+                  {term}m
+                </Button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {showDateField && (
           <div className="space-y-2">
@@ -218,7 +211,6 @@ export function CreditInstallmentFields({
         </div>
       )}
 
-      {/* Campo oculto para el envío del formulario cuando se usa el selector MSI */}
       {hasZeroInterest && (
         <input type="hidden" name="installments" value={parsedInstallments} />
       )}

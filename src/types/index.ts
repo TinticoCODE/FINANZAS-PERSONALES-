@@ -49,6 +49,14 @@ export type CreditCardData = {
   deferredInstallmentsDue?: number;
   msiInstallmentsDue?: number;
   minPayment?: number;
+  /** Días hasta el próximo corte (recalculado con zona horaria del usuario). */
+  daysToCutoff?: number;
+  /** Días hasta el próximo vencimiento de pago. */
+  daysToPayment?: number;
+  nextCutoffDate?: string;
+  nextPaymentDueDate?: string;
+  activeCycleStart?: string;
+  activeCycleEnd?: string;
   /** Deuda real proyectada según cuotas pendientes (motor inmutable). */
   projectedRemainingDebt?: number;
   /** Cuota total proyectada del ciclo actual. */

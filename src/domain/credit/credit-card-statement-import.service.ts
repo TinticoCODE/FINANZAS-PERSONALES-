@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/decimal";
 import { localMidnightToUtc } from "@/domain/billing/timezone";
-import { isMsiTerm } from "@/domain/credit/msi.constants";
+import { isMsiPurchase } from "@/domain/credit/msi.constants";
 import {
   computeStatementLineHash,
   pdfFileHashTag,
@@ -96,7 +96,7 @@ function resolveInstallmentFields(line: StatementExpenseLineInput) {
   const totalInstallments = line.totalInstallments;
   const isInstallments = totalInstallments > 1;
   const hasZeroInterest =
-    isInstallments && line.eaRate === 0 && isMsiTerm(totalInstallments);
+    isInstallments && line.eaRate === 0 && isMsiPurchase(totalInstallments, true);
 
   return {
     installments: totalInstallments,

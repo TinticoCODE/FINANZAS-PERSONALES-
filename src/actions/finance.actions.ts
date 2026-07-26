@@ -29,7 +29,6 @@ import {
 import { processCreditCardPayment } from "@/domain/credit/credit-card-payment.service";
 import {
   computeInstallmentAmount,
-  isMsiTerm,
 } from "@/domain/credit/msi.constants";
 import {
   computeNextRunAt,
@@ -255,8 +254,8 @@ function resolveCreditInstallmentFields(
   const isInstallments = totalInstallments > 1;
   const zeroInterest = Boolean(hasZeroInterest) && isInstallments;
 
-  if (zeroInterest && !isMsiTerm(totalInstallments)) {
-    throw new Error("Las compras MSI solo permiten plazos de 3, 6 o 9 meses");
+  if (zeroInterest && totalInstallments < 2) {
+    throw new Error("Las compras MSI requieren al menos 2 cuotas");
   }
 
   return {

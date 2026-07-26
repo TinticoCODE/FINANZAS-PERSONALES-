@@ -32,18 +32,27 @@ export function FinancialCalendar({ reminders, cards, budgets }: FinancialCalend
       title: r.title,
       type: r.type,
     })),
-    ...cards.flatMap((card) => [
-      {
-        date: new Date(now.getFullYear(), now.getMonth(), card.cutOffDate),
-        title: `Corte ${card.name}`,
-        type: "CUTOFF",
-      },
-      {
-        date: new Date(now.getFullYear(), now.getMonth(), card.paymentDueDate),
-        title: `Pago ${card.name}`,
-        type: "PAYMENT",
-      },
-    ]),
+    ...cards.flatMap((card) => {
+      const cutoffDate = card.nextCutoffDate
+        ? utcToUserLocal(card.nextCutoffDate, timezone)
+        : new Date(now.getFullYear(), now.getMonth(), card.cutOffDate);
+      const paymentDate = card.nextPaymentDueDate
+        ? utcToUserLocal(card.nextPaymentDueDate, timezone)
+        : new Date(now.getFullYear(), now.getMonth(), card.paymentDueDate);
+
+      return [
+        {
+          date: cutoffDate,
+          title: `Corte ${card.name}`,
+          type: "CUTOFF",
+        },
+        {
+          date: paymentDate,
+          title: `Pago ${card.name}`,
+          type: "PAYMENT",
+        },
+      ];
+    }),
   ];
 
   const upcomingEvents = events

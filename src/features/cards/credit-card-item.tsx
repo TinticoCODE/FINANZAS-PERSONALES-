@@ -26,8 +26,6 @@ import {
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { teaToMonthlyPercent } from "@/services/credit-card.service";
 import { cn } from "@/lib/utils";
-import { utcToUserLocal } from "@/utils/dates";
-import { useUserTimezone } from "@/contexts/user-timezone-context";
 import { CreditCardPaymentDialog } from "@/features/cards/credit-card-payment-dialog";
 import type { AccountData, CreditCardData } from "@/types";
 
@@ -40,16 +38,6 @@ type CreditCardItemProps = {
 
 function normalizeCardName(name: string): string {
   return name.replace(/\bRAPPY\s+CARD\b/i, "RAPPI CARD");
-}
-
-function getDaysUntil(dayOfMonth: number, timezone: string): number {
-  const today = utcToUserLocal(new Date(), timezone);
-  const currentDay = today.getDate();
-  if (currentDay <= dayOfMonth) {
-    return dayOfMonth - currentDay;
-  }
-  const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
-  return Math.ceil((nextMonth.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
 function getUtilizationTone(utilization: number) {
@@ -80,7 +68,6 @@ export function CreditCardItem({
   onDelete,
   deleting,
 }: CreditCardItemProps) {
-  const timezone = useUserTimezone();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const displayName = normalizeCardName(card.name);
 
@@ -89,8 +76,8 @@ export function CreditCardItem({
   const utilization =
     card.creditLimit > 0 ? (card.usedBalance / card.creditLimit) * 100 : 0;
   const available = Math.max(card.creditLimit - card.usedBalance, 0);
-  const daysToCutoff = getDaysUntil(card.cutOffDate, timezone);
-  const daysToPayment = getDaysUntil(card.paymentDueDate, timezone);
+  const daysToCutoff = card.daysToCutoff ?? 0;
+  const daysToPayment = card.daysToPayment ?? 0;
   const recommendedPayment = card.paymentToAvoidInterest ?? card.usedBalance * 0.3;
   const minPayment = card.minPayment ?? card.usedBalance * 0.05;
   const singleInstallmentDue =

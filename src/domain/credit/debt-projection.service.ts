@@ -1,36 +1,21 @@
 import {
-  buildAmortizationSchedule,
+  advanceCycleEnd,
   getCurrentBillingCycle,
+  getInstallmentPaymentDates,
   getPaymentDueForCycle,
-  getStatementCycleForDate,
-  type CreditCardBillingConfig,
+  getStatementCycleForInstant,
+  isWithinCycle,
+  sameMonthYear,
   type StatementCycle,
+} from "@/domain/billing/credit-card-billing";
+import { toUserLocalTime } from "@/domain/billing/timezone";
+import {
+  buildAmortizationSchedule,
+  type CreditCardBillingConfig,
 } from "@/services/credit-card.service";
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function clampDay(year: number, month: number, day: number): Date {
-  const lastDay = new Date(year, month + 1, 0).getDate();
-  return new Date(year, month, Math.min(day, lastDay));
-}
-
-function sameMonthYear(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
-}
-
-/** Avanza al cierre del ciclo de facturación siguiente. */
-function nextCycleEnd(cycleEnd: Date, cutOffDate: number): Date {
-  let month = cycleEnd.getMonth() + 1;
-  let year = cycleEnd.getFullYear();
-  if (month > 11) {
-    month = 0;
-    year += 1;
-  }
-  const next = clampDay(year, month, cutOffDate);
-  next.setHours(23, 59, 59, 999);
-  return next;
 }
 
 /**
@@ -39,15 +24,17 @@ function nextCycleEnd(cycleEnd: Date, cutOffDate: number): Date {
  */
 export function countBillingCyclesAdvanced(
   anchorCycleEnd: Date,
-  realCurrentDate: Date,
-  cutOffDate: number
+  realCurrentInstantUtc: Date,
+  cutOffDate: number,
+  timezone: string
 ): number {
+  const referenceLocal = toUserLocalTime(realCurrentInstantUtc, timezone);
   let cycles = 0;
-  let cursor = nextCycleEnd(anchorCycleEnd, cutOffDate);
+  let cursor = advanceCycleEnd(anchorCycleEnd, cutOffDate);
 
-  while (cursor.getTime() <= realCurrentDate.getTime()) {
+  while (cursor.getTime() <= referenceLocal.getTime()) {
     cycles += 1;
-    cursor = nextCycleEnd(cursor, cutOffDate);
+    cursor = advanceCycleEnd(cursor, cutOffDate);
   }
 
   return cycles;
@@ -78,12 +65,17 @@ export type ProjectedDebtResult = {
 
 function resolveAnchorCycleEnd(
   transaction: ProjectedDebtTransaction,
-  cutOffDate: number
+  cutOffDate: number,
+  timezone: string
 ): Date {
   if (transaction.statementCycleEnd) {
     return transaction.statementCycleEnd;
   }
-  return getStatementCycleForDate(transaction.date, cutOffDate).cycleEnd;
+  return getStatementCycleForInstant(
+    transaction.date,
+    cutOffDate,
+    timezone
+  ).cycleEnd;
 }
 
 function computeRemainingPrincipal(
@@ -129,44 +121,25 @@ function computeInstallmentDueThisCycle(
   projectedInstallment: number,
   config: CreditCardBillingConfig,
   currentCycle: StatementCycle,
-  paymentDueDate: Date
+  paymentDueDate: Date,
+  timezone: string
 ): number {
   const total = Math.max(1, transaction.installments);
   if (projectedInstallment > total) return 0;
 
   if (total === 1) {
-    const purchaseCycle = getStatementCycleForDate(
-      transaction.date,
-      config.cutOffDate
-    );
-    return purchaseCycle.cycleEnd.getTime() >= currentCycle.cycleStart.getTime() &&
-      purchaseCycle.cycleEnd.getTime() <= currentCycle.cycleEnd.getTime()
+    return isWithinCycle(transaction.date, currentCycle, timezone)
       ? round2(transaction.amount)
       : 0;
   }
 
-  const purchaseCycle = getStatementCycleForDate(
+  const dueDates = getInstallmentPaymentDates(
     transaction.date,
-    config.cutOffDate
-  );
-  const firstDue = getPaymentDueForCycle(
-    purchaseCycle.cycleEnd,
+    total,
     config.cutOffDate,
-    config.paymentDueDate
+    config.paymentDueDate,
+    timezone
   );
-
-  const dueDates: Date[] = [];
-  for (let i = 0; i < total; i++) {
-    const due = new Date(firstDue);
-    due.setMonth(due.getMonth() + i);
-    const normalized = clampDay(
-      due.getFullYear(),
-      due.getMonth(),
-      config.paymentDueDate
-    );
-    normalized.setHours(23, 59, 59, 999);
-    dueDates.push(normalized);
-  }
 
   const dueIndex = projectedInstallment - 1;
   if (dueIndex < 0 || dueIndex >= dueDates.length) return 0;
@@ -174,8 +147,7 @@ function computeInstallmentDueThisCycle(
 
   if (transaction.hasZeroInterest) {
     return round2(
-      transaction.installmentAmount ??
-        transaction.amount / total
+      transaction.installmentAmount ?? transaction.amount / total
     );
   }
 
@@ -193,7 +165,7 @@ function computeInstallmentDueThisCycle(
  *
  * Matemática:
  * 1. Ancla = fin del ciclo del extracto (o del ciclo de compra si no hay extracto).
- * 2. cyclesAdvanced = cierres de ciclo completos entre ancla y hoy.
+ * 2. cyclesAdvanced = cierres de ciclo completos entre ancla y hoy (zona usuario).
  * 3. projectedInstallment = min(recorded + cyclesAdvanced, totalInstallments).
  * 4. remainingPrincipal = suma de cuotas pendientes desde projectedInstallment.
  * 5. installmentDueThisCycle = cuota del mes si el vencimiento cae en el ciclo actual.
@@ -201,7 +173,8 @@ function computeInstallmentDueThisCycle(
 export function calculateProjectedDebt(
   transaction: ProjectedDebtTransaction,
   config: CreditCardBillingConfig,
-  realCurrentDate: Date = new Date()
+  timezone: string,
+  instantUtc: Date = new Date()
 ): ProjectedDebtResult {
   const totalInstallments = Math.max(1, transaction.installments);
   const recordedCurrentInstallment = Math.min(
@@ -211,12 +184,14 @@ export function calculateProjectedDebt(
 
   const anchorCycleEnd = resolveAnchorCycleEnd(
     transaction,
-    config.cutOffDate
+    config.cutOffDate,
+    timezone
   );
   const cyclesAdvanced = countBillingCyclesAdvanced(
     anchorCycleEnd,
-    realCurrentDate,
-    config.cutOffDate
+    instantUtc,
+    config.cutOffDate,
+    timezone
   );
 
   const projectedCurrentInstallment = Math.min(
@@ -241,7 +216,8 @@ export function calculateProjectedDebt(
 
   const currentCycle = getCurrentBillingCycle(
     config.cutOffDate,
-    realCurrentDate
+    timezone,
+    instantUtc
   );
   const paymentDueDate = getPaymentDueForCycle(
     currentCycle.cycleEnd,
@@ -256,7 +232,8 @@ export function calculateProjectedDebt(
         projectedCurrentInstallment,
         config,
         currentCycle,
-        paymentDueDate
+        paymentDueDate,
+        timezone
       );
 
   return {
@@ -283,7 +260,8 @@ export function calculateCardProjectedDebt(
   purchases: ProjectedDebtTransaction[],
   storedUsedBalance: number,
   config: CreditCardBillingConfig,
-  realCurrentDate: Date = new Date()
+  timezone: string,
+  instantUtc: Date = new Date()
 ): CardProjectedDebtSummary {
   let projectedRemainingDebt = 0;
   let projectedPaymentDueThisCycle = 0;
@@ -293,7 +271,8 @@ export function calculateCardProjectedDebt(
     const projection = calculateProjectedDebt(
       purchase,
       config,
-      realCurrentDate
+      timezone,
+      instantUtc
     );
     if (!projection.isFullyPaid) {
       projectedRemainingDebt += projection.remainingPrincipal;

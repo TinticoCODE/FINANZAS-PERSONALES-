@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "test": "node --import tsx --test src/domain/billing/credit-card-billing.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -56,6 +57,7 @@
     "eslint-config-next": "16.2.10",
     "prisma": "^6.19.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.3",
     "typescript": "^5"
   }
 }
